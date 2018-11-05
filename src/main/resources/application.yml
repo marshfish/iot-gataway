@@ -1,0 +1,51 @@
+logging:
+  level:
+      com.hc: debug
+  file: ./log/dispatcher.log
+  root: DEBUG
+spring:
+  datasource:
+    driver-class-name: com.mysql.jdbc.Driver
+    url: jdbc:mysql://localhost:3306/hc_dev?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
+    username: root
+    password: csk110110
+  jpa:
+      properties:
+        hibernate:
+          hbm2ddl:
+            auto: update
+dispatcher:
+  commons:
+    artifactId: dispatcher_1
+    host: 0.0.0.0
+    httpPort: 8888
+    maxHTTPIdleTime: 5
+    eventBusQueueSize: 100
+    eventBusThreadNumber: 1
+    instanceNumber: 1
+    maxBusBlockingTime: 1500
+    devCallbackDomain: https://hcdev.hushijie.com.cn
+    testCallbackDomain: https://hctest.hushijie.com.cn/
+    preOnlineCallbackDomain: https://hcpreonline.hushijie.com.cn/
+    onlineCallbackDomain: https://hconline.hushijie.com.cn/
+  redis:
+    maxTotal: 100
+    maxIdle: 3000
+    maxWaitMills: 3000
+    testOnBorrow: true
+    address: 127.0.0.1
+    port: 6379
+    maxWait: 3000
+    auth:
+    databaseIndex: 0
+  rabbitmq:
+    mqHost: 39.105.125.26
+    mqPort: 5672
+    mqUserName: admin
+    mqPwd: 12345678
+    virtualHost: /
+    upQueueName: upstream
+    downQueueName: downstream
+    exchangeName: device_communication
+
+
