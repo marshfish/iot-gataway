@@ -8,7 +8,7 @@ import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-public class ConnectorResponseAsync extends AsyncEventHandler {
+public class ReceiveResponseAsync extends AsyncEventHandler {
     @Override
     public void accept(TransportEventEntry event) {
         log.info("connector响应：{}",event);
@@ -16,6 +16,6 @@ public class ConnectorResponseAsync extends AsyncEventHandler {
 
     @Override
     public Integer setEventType() {
-        return EventTypeEnum.CONNECTOR_RESPONSE.getType();
+        return EventTypeEnum.CLIENT_RESPONSE.getType();
     }
 }

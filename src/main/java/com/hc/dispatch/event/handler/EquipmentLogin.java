@@ -3,6 +3,7 @@ package com.hc.dispatch.event.handler;
 import com.google.gson.Gson;
 import com.hc.business.dal.EquipmentDAL;
 import com.hc.business.dal.dao.EquipmentRegistry;
+import com.hc.configuration.ConfigCenter;
 import com.hc.dispatch.event.AsyncEventHandler;
 import com.hc.exception.NullParamException;
 import com.hc.message.MqConnector;
@@ -17,7 +18,9 @@ import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
 import javax.annotation.Resource;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Slf4j
 @Component
@@ -30,6 +33,8 @@ public class EquipmentLogin extends AsyncEventHandler {
     private Gson gson;
     @Resource
     private MqConnector mqConnector;
+    @Resource
+    private ConfigCenter configCenter;
     public static final String CACHE_MAP = "device_session";
 
     @Override
@@ -47,6 +52,7 @@ public class EquipmentLogin extends AsyncEventHandler {
             log.warn("设备登陆失败，未注册，{}", event);
             event.setMsg("设备登陆失败，未注册");
             event.setType(EventTypeEnum.LOGIN_FAIL.getType());
+            event.setConnectorId("");
             publishToConnector(event, event.getEqType());
         } else {
             //设备已注册
@@ -60,15 +66,17 @@ public class EquipmentLogin extends AsyncEventHandler {
                 Long hsetnx = jedis.hsetnx(CACHE_MAP, md5UniqueId, gson.toJson(redisEntry));
                 if (hsetnx == 1) {
                     log.info("设备类型：【{}】，ID:【{}】从【{}】登陆", event.getEqType(),
-                            event.getEqId(), event.getInstanceId());
+                            event.getEqId(), event.getConnectorId());
                     //返回登陆成功事件，传入环境配置
                     event.setType(EventTypeEnum.LOGIN_SUCCESS.getType());
                     event.setProfile(registry.getEquipmentProfile());
+                    event.setDispatcherId("1");
                     publishToConnector(event, registry.getEquipmentType());
                 } else {
                     log.warn("设备登陆失败，设备已登陆，{}", event);
                     event.setType(EventTypeEnum.LOGIN_FAIL.getType());
                     event.setMsg("设备登陆失败，设备已登陆");
+                    event.setDispatcherId("1");
                     publishToConnector(event, event.getEqType());
                 }
             }
@@ -77,13 +85,18 @@ public class EquipmentLogin extends AsyncEventHandler {
 
     /**
      * 推送给connector
-     * @param entry 事件
+     *
+     * @param entry  事件
      * @param eqType 设备类型
      */
     private void publishToConnector(TransportEventEntry entry, Integer eqType) {
         EquipmentTypeEnum equipmentTypeEnum = EquipmentTypeEnum.getEnumByCode(eqType);
         if (equipmentTypeEnum != null) {
-            mqConnector.publish(equipmentTypeEnum.getQueueName(), gson.toJson(entry));
+            String eqName = configCenter.getEquipmentTypeRegistry().get(eqType);
+            String downQueueName = mqConnector.getDownQueueName(eqName);
+            Map<String, Object> headers = new HashMap<>();
+            headers.put("connectorId",entry.getDispatcherId());
+            mqConnector.publish(downQueueName, gson.toJson(entry));
         } else {
             log.error("设备类型错误,event:{},eqType:{}", entry, eqType);
         }

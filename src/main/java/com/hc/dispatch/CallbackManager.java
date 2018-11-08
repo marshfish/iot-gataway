@@ -10,7 +10,6 @@ import java.util.function.Consumer;
 
 /**
  * 同步回调管理器
- * 包括
  */
 @Slf4j
 @Controller

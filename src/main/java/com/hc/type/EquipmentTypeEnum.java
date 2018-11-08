@@ -10,7 +10,7 @@ public enum EquipmentTypeEnum {
     private int type;
     private String desc;
 
-     EquipmentTypeEnum(int type, String desc) {
+    EquipmentTypeEnum(int type, String desc) {
         this.type = type;
         this.desc = desc;
     }
@@ -22,6 +22,7 @@ public enum EquipmentTypeEnum {
     public String getDesc() {
         return desc;
     }
+
     //TODO 缓存池
     public String getQueueName() {
         return type + "_" + desc;
@@ -33,7 +34,7 @@ public enum EquipmentTypeEnum {
                 return equipmentTypeEnum;
             }
         }
-        return null;
+        throw new RuntimeException("设备类型枚举不存在！");
     }
 
 }

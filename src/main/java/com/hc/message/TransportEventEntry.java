@@ -17,21 +17,33 @@ public class TransportEventEntry {
      */
     private String eqId;
     /**
+     * connector节点项目名
+     */
+    private String nodeArtifactId;
+    /**
      * 设备类型
      */
     private Integer eqType;
     /**
-     * 节点ID
+     * disptcher节点ID
      */
-    private String instanceId;
+    private String dispatcherId;
+    /**
+     * connector节点ID
+     */
+    private String connectorId;
     /**
      * 指令流水号
      */
     private String serialNumber;
     /**
+     * 设备协议
+     */
+    private Integer protocol;
+    /**
      * 指令
      */
-    private String msg;
+    private Object msg;
     /**
      * 环境配置
      */

@@ -6,9 +6,6 @@ import org.springframework.context.ApplicationContextAware;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
-import java.util.List;
-
 @Component
 @Order(0)
 public class SpringContextUtil implements ApplicationContextAware {

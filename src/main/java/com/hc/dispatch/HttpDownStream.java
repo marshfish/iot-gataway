@@ -4,8 +4,9 @@ import com.google.gson.Gson;
 import com.hc.business.vo.BaseResult;
 import com.hc.configuration.CommonConfig;
 import com.hc.dispatch.event.EventHandlerPipeline;
-import com.hc.dispatch.event.handler.ConnectorResponseAsync;
-import com.hc.dispatch.event.handler.ConnectorResponseSync;
+import com.hc.dispatch.event.PipelineContainer;
+import com.hc.dispatch.event.handler.ReceiveResponseAsync;
+import com.hc.dispatch.event.handler.ReceiveResponseSync;
 import com.hc.mvc.DispatcherProxy;
 import com.hc.util.SpringContextUtil;
 import io.vertx.core.AbstractVerticle;
@@ -41,12 +42,8 @@ public class HttpDownStream extends AbstractVerticle {
         httpServer.requestHandler(request ->
                 request.bodyHandler(buffer -> {
                     try {
-                        String requestId = String.valueOf(request.hashCode());
-                        String responseAck = request.getHeader("responseAck");
-                        boolean needAck = Boolean.parseBoolean(responseAck);
-                        //根据请求是否需要应答，添加同步/异步 响应事件处理器
-                        AckDynamicPipeline(requestId, needAck);
-                        String result = dispatcherProxy.routingHTTP(requestId, request, buffer.getString(0, buffer.length()));
+                        //HTTP路由
+                        String result = dispatcherProxy.routingHTTP(request, buffer.getString(0, buffer.length()));
                         writeSuccessResponse(request, result);
                     } catch (Exception e) {
                         log.error("HTTP request异常，{}", e);
@@ -57,21 +54,6 @@ public class HttpDownStream extends AbstractVerticle {
                     log.error("HTTP request异常，{}", throwable);
                 })).exceptionHandler(throwable -> log.error("HTTP服务器异常:{}", throwable));
     }
-    //TODO 重构
-    private void AckDynamicPipeline(String requestId, boolean needAck) {
-        if (needAck) {
-            EventHandlerPipeline defaultPipeline = EventHandlerPipeline.getDefaultPipeline();
-            EventHandlerPipeline thisPipeline = (EventHandlerPipeline) defaultPipeline.clone();
-            thisPipeline.addEventHandler(SpringContextUtil.getBean(ConnectorResponseSync.class));
-            EventHandlerPipeline.addPipeline(requestId, thisPipeline);
-        } else {
-            EventHandlerPipeline defaultPipeline = EventHandlerPipeline.getDefaultPipeline();
-            EventHandlerPipeline thisPipeline = (EventHandlerPipeline) defaultPipeline.clone();
-            thisPipeline.addEventHandler(SpringContextUtil.getBean(ConnectorResponseAsync.class));
-            EventHandlerPipeline.addPipeline(requestId, thisPipeline);
-        }
-    }
-
 
     private void loadBootstrapListener() {
         httpServer.listen(commonConfig.getHttpPort(), commonConfig.getHost(), httpServerAsyncResult -> {

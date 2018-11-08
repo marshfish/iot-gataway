@@ -7,10 +7,10 @@ import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
-public class ConnectorResponseSync extends SyncEventHandler {
+public class ReceiveResponseSync extends SyncEventHandler {
 
     @Override
     public Integer setEventType() {
-        return EventTypeEnum.CONNECTOR_RESPONSE.getType();
+        return EventTypeEnum.CLIENT_RESPONSE.getType();
     }
 }

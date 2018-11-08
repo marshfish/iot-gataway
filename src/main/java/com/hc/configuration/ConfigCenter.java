@@ -1,9 +1,12 @@
 package com.hc.configuration;
 
+import com.hc.Bootstrap;
+import com.hc.LoadOrder;
 import com.hc.business.dal.ConfigurationDAL;
 import com.hc.business.dal.dao.Configuration;
 import com.hc.business.dto.ConfigDTO;
 import com.hc.type.ConfigTypeEnum;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.InitializingBean;
 import org.springframework.stereotype.Component;
@@ -11,9 +14,11 @@ import org.springframework.util.CollectionUtils;
 
 import javax.annotation.Resource;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Consumer;
 
 /**
  * 配置中心本地缓存
@@ -21,38 +26,57 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 @Component
 @Slf4j
-public class ConfigCenter implements InitializingBean {
+@LoadOrder(value = 4)
+public class ConfigCenter implements Bootstrap {
     @Resource
     private ConfigurationDAL configurationDAL;
+    @Getter
+    private Map<Integer, String> equipmentTypeRegistry = new ConcurrentHashMap<>(5);
+    @Getter
+    private Map<Integer, String> profileRegistry = new ConcurrentHashMap<>(5);
+    @Getter
+    private Map<Integer, String> protocolRegistry = new ConcurrentHashMap<>(5);
 
-    private static Map<Integer, String> equipmentTypeRegistry = new ConcurrentHashMap<>(5);
-    private static Map<Integer, String> profileRegistry = new ConcurrentHashMap<>(5);
-    private static Map<Integer, String> protocolRegistry = new ConcurrentHashMap<>(5);
-    private static final String EQUIPMENT_TYPE = "equipment_registry";
-    private static final String PROFILE_TYPE = "profile_registry";
-    private static final String PROTOCOL_TYPE = "protocol_registry";
-
+    /**
+     * 添加设备类型
+     *
+     * @param configDTO configDTO
+     */
     public void addEquipmentType(ConfigDTO configDTO) {
-        if (equipmentTypeRegistry.get(configDTO.getType()) != null) {
-
-        }
         equipmentTypeRegistry.putIfAbsent(configDTO.getType(), configDTO.getDesc());
         Configuration equipmentType = getConfiguration(configDTO, ConfigTypeEnum.EQUIPMENT_TYPE.getType());
         configurationDAL.save(equipmentType);
     }
 
+    /**
+     * 添加环境类型及回调地址
+     *
+     * @param configDTO configDTO
+     */
     public void addProfile(ConfigDTO configDTO) {
         profileRegistry.putIfAbsent(configDTO.getType(), configDTO.getDesc());
         Configuration equipmentProfile = getConfiguration(configDTO, ConfigTypeEnum.ARTIFACT_PROFILE.getType());
         configurationDAL.save(equipmentProfile);
     }
 
+    /**
+     * 添加协议类型
+     *
+     * @param configDTO configDTO
+     */
     public void addProtocol(ConfigDTO configDTO) {
         protocolRegistry.putIfAbsent(configDTO.getType(), configDTO.getDesc());
         Configuration equipmentProtocol = getConfiguration(configDTO, ConfigTypeEnum.PROTOCOL.getType());
         configurationDAL.save(equipmentProtocol);
     }
 
+    /**
+     * newConfiguration
+     *
+     * @param configDTO  configDTO
+     * @param configType 配置类型
+     * @return Configuration
+     */
     private Configuration getConfiguration(ConfigDTO configDTO, Integer configType) {
         Configuration configuration = new Configuration();
         configuration.setConfigType(configType);
@@ -61,16 +85,31 @@ public class ConfigCenter implements InitializingBean {
         return configuration;
     }
 
+    /**
+     * 删除设备类型
+     *
+     * @param type 设备类型
+     */
     public void removeEquipmentType(int type) {
         protocolRegistry.remove(type);
         configurationDAL.removeByDescKeyAndConfigType(type, ConfigTypeEnum.EQUIPMENT_TYPE.getType());
     }
 
+    /**
+     * 删除环境
+     *
+     * @param type 环境类型
+     */
     public void removeProfile(int type) {
         profileRegistry.remove(type);
         configurationDAL.removeByDescKeyAndConfigType(type, ConfigTypeEnum.ARTIFACT_PROFILE.getType());
     }
 
+    /**
+     * 删除协议
+     *
+     * @param type 协议类型
+     */
     public void removeProtocol(int type) {
         protocolRegistry.remove(type);
         configurationDAL.removeByDescKeyAndConfigType(type, ConfigTypeEnum.PROTOCOL.getType());
@@ -80,7 +119,7 @@ public class ConfigCenter implements InitializingBean {
         if (equipmentTypeRegistry.containsKey(type)) {
             return true;
         } else {
-            return existDB(type, EQUIPMENT_TYPE);
+            return existDB(type, ConfigTypeEnum.EQUIPMENT_TYPE);
         }
     }
 
@@ -88,7 +127,7 @@ public class ConfigCenter implements InitializingBean {
         if (profileRegistry.containsKey(type)) {
             return true;
         } else {
-            return existDB(type, PROFILE_TYPE);
+            return existDB(type, ConfigTypeEnum.ARTIFACT_PROFILE);
         }
     }
 
@@ -96,20 +135,20 @@ public class ConfigCenter implements InitializingBean {
         if (protocolRegistry.containsKey(type)) {
             return true;
         } else {
-            return existDB(type, PROTOCOL_TYPE);
+            return existDB(type, ConfigTypeEnum.PROTOCOL);
         }
     }
 
-    private boolean existDB(int type, String configType) {
+    private boolean existDB(int type, ConfigTypeEnum configType) {
         List collection;
         switch (configType) {
             case EQUIPMENT_TYPE:
                 collection = configurationDAL.getByDescKeyAndConfigType(type, ConfigTypeEnum.EQUIPMENT_TYPE.getType());
                 break;
-            case PROFILE_TYPE:
+            case ARTIFACT_PROFILE:
                 collection = configurationDAL.getByDescKeyAndConfigType(type, ConfigTypeEnum.ARTIFACT_PROFILE.getType());
                 break;
-            case PROTOCOL_TYPE:
+            case PROTOCOL:
                 collection = configurationDAL.getByDescKeyAndConfigType(type, ConfigTypeEnum.PROTOCOL.getType());
                 break;
             default:
@@ -127,7 +166,7 @@ public class ConfigCenter implements InitializingBean {
      * 出于性能考虑没用全局锁，但concurrentHashMap无法保证原子性
      * 配置同步的概率很低，但也有可能有线程安全问题，故配置同步时直接丢弃掉原有的map，把引用指向newMap
      */
-    private synchronized void reloadCache(String type) {
+    private synchronized void reloadCache(ConfigTypeEnum type) {
         Map<Integer, String> newMap = new ConcurrentHashMap<>(5);
         switch (type) {
             case EQUIPMENT_TYPE:
@@ -135,12 +174,12 @@ public class ConfigCenter implements InitializingBean {
                         forEach(configuration -> newMap.put(configuration.getValue(), configuration.getDescKey()));
                 equipmentTypeRegistry = newMap;
                 break;
-            case PROFILE_TYPE:
+            case ARTIFACT_PROFILE:
                 configurationDAL.getByConfigType(ConfigTypeEnum.ARTIFACT_PROFILE.getType()).
                         forEach(configuration -> newMap.put(configuration.getValue(), configuration.getDescKey()));
                 profileRegistry = newMap;
                 break;
-            case PROTOCOL_TYPE:
+            case PROTOCOL:
                 configurationDAL.getByConfigType(ConfigTypeEnum.PROTOCOL.getType()).
                         forEach(configuration -> newMap.put(configuration.getValue(), configuration.getDescKey()));
                 protocolRegistry = newMap;
@@ -149,16 +188,32 @@ public class ConfigCenter implements InitializingBean {
         }
     }
 
-    @Override
-    public void afterPropertiesSet() throws Exception {
-        reloadCache(EQUIPMENT_TYPE);
-        reloadCache(PROFILE_TYPE);
-        reloadCache(PROTOCOL_TYPE);
-    }
-
+    /**
+     * 获取所有配置信息
+     *
+     * @return List
+     */
     public List<Configuration> getAllConfiguration() {
         List<Configuration> list = new ArrayList<>(15);
         configurationDAL.findAll().forEach(list::add);
         return list;
+    }
+
+    /**
+     * 根据配置类型获取详细配置
+     * @param configType 配置类型
+     */
+    public Map<Integer, String> getConfigByConfigType(Integer configType) {
+        List<Configuration> byConfigType = configurationDAL.getByConfigType(configType);
+        HashMap<Integer, String> map = new HashMap<>();
+        byConfigType.forEach(configuration -> map.put(configuration.getValue(), configuration.getDescKey()));
+        return map;
+    }
+
+    @Override
+    public void init() {
+        reloadCache(ConfigTypeEnum.EQUIPMENT_TYPE);
+        reloadCache(ConfigTypeEnum.ARTIFACT_PROFILE);
+        reloadCache(ConfigTypeEnum.PROTOCOL);
     }
 }

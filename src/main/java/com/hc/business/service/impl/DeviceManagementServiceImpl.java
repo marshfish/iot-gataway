@@ -73,6 +73,7 @@ public class DeviceManagementServiceImpl extends CommonUtil implements DeviceMan
     }
 
     @Override
+    @Transactional
     public List<EquipmentRegistry> selectEquipmentByCondition(EquipmentRegisterDTO equipmentRegisterDTO) {
         String uniqueId = equipmentRegisterDTO.getUniqueId();
         String equipmentId = equipmentRegisterDTO.getEquipmentId();
@@ -113,6 +114,7 @@ public class DeviceManagementServiceImpl extends CommonUtil implements DeviceMan
     }
 
     @Override
+    @Transactional
     public void updateEquipmentByCondition(EquipmentRegisterDTO equipmentRegisterDTO) {
         String uniqueId = equipmentRegisterDTO.getUniqueId();
         String equipmentId = equipmentRegisterDTO.getEquipmentId();

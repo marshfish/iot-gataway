@@ -20,4 +20,5 @@ public class RedisConfig {
     private int maxWait;
     private String auth;
     private int databaseIndex;
+    private int keyExpire;
 }

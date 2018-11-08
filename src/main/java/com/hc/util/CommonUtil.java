@@ -1,6 +1,7 @@
 package com.hc.util;
 
 import com.hc.DispatcherApplication;
+import com.hc.dispatch.ClusterManager;
 import com.hc.exception.NullParamException;
 import com.hc.mvc.NotNull;
 import io.vertx.core.eventbus.DeliveryOptions;
@@ -22,24 +23,6 @@ import java.util.List;
 public class CommonUtil {
     private static final String GET = "get";
 
-    /**
-     * 推送给Connector
-     *
-     * @param serialNumber 指令流水号
-     * @param message      消息
-     */
-    public void publish(String serialNumber, Object message) {
-        publish(serialNumber, message, null);
-    }
-
-    public void publish(String serialNumber, Object message, CaseInsensitiveHeaders headers) {
-        publish(serialNumber, message, headers, 30 * 1000);
-    }
-
-    public void publish(String serialNumber, Object message, CaseInsensitiveHeaders headers, long sendTimeout) {
-        DispatcherApplication.getEventBus().publish(serialNumber, message, new DeliveryOptions()
-                .setHeaders(headers).setSendTimeout(sendTimeout));
-    }
     public String MD5(String message){
         try {
             return DigestUtils.md5DigestAsHex(message.getBytes("UTF-8"));

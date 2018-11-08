@@ -1,6 +1,7 @@
 package com.hc.business.dto;
 
 import com.hc.mvc.NotNull;
+import io.vertx.core.http.HttpServerRequest;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 
@@ -18,6 +19,11 @@ public class EquipmentDTO {
     @NotNull
     private String serialNumber;
     /**
+     * 挂起请求并返回设备响应结果
+     */
+    @NotNull
+    private boolean autoAck;
+    /**
      * 设备系统唯一ID
      */
     @NotNull
@@ -32,4 +38,5 @@ public class EquipmentDTO {
      */
     @NotNull
     private String instruction;
+
 }

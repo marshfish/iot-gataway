@@ -3,7 +3,6 @@ package com.hc.dispatch.event;
 
 import com.hc.message.MqConnector;
 import com.hc.message.TransportEventEntry;
-import org.springframework.beans.factory.BeanFactoryAware;
 
 import java.util.function.Consumer;
 

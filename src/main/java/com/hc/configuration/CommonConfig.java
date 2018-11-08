@@ -14,7 +14,7 @@ public class CommonConfig {
     /**
      * 项目ID
      */
-    private String artifactId;
+    private String dispatcherId;
     /**
      * 最大HTTP阻塞时间
      */
@@ -43,4 +43,8 @@ public class CommonConfig {
      */
     private int eventBusQueueSize;
     private Integer instanceNumber;
+    /**
+     * 同步调用最大阻塞时间
+     */
+    private Integer maxBusBlockingTime;
 }

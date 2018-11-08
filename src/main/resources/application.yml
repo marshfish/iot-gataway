@@ -24,7 +24,7 @@ dispatcher:
     eventBusThreadNumber: 1
     instanceNumber: 1
     maxBusBlockingTime: 1500
-    devCallbackDomain: https://hcdev.hushijie.com.cn
+    devCallbackDomain: https://hcdev.hushijie.com.cn/
     testCallbackDomain: https://hctest.hushijie.com.cn/
     preOnlineCallbackDomain: https://hcpreonline.hushijie.com.cn/
     onlineCallbackDomain: https://hconline.hushijie.com.cn/
@@ -38,6 +38,7 @@ dispatcher:
     maxWait: 3000
     auth:
     databaseIndex: 0
+    keyExpire: 180
   rabbitmq:
     mqHost: 39.105.125.26
     mqPort: 5672

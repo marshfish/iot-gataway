@@ -5,14 +5,12 @@ import com.hc.business.dal.EquipmentDAL;
 import com.hc.business.dal.dao.EquipmentRegistry;
 import com.hc.business.dto.EquipmentDTO;
 import com.hc.business.service.DeviceInstructionService;
+import com.hc.configuration.ConfigCenter;
 import com.hc.message.MqConnector;
 import com.hc.message.RedisEntry;
-import com.hc.exception.NullParamException;
 import com.hc.message.TransportEventEntry;
 import com.hc.type.EquipmentTypeEnum;
-import com.hc.type.EventTypeEnum;
 import com.hc.util.CommonUtil;
-import com.hc.util.IdGenerator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
@@ -39,7 +37,8 @@ public class DeviceInstructionServiceImpl extends CommonUtil implements DeviceIn
     private Gson gson;
     @Resource
     private MqConnector mqConnector;
-
+    @Resource
+    private ConfigCenter configCenter;
     public static final String CACHE_MAP = "device_session";
 
     @Override
@@ -64,8 +63,11 @@ public class DeviceInstructionServiceImpl extends CommonUtil implements DeviceIn
             entry.setEqType(redisEntry.getEqType());
             entry.setMsg(equipmentDTO.getInstruction());
             entry.setSerialNumber(equipmentDTO.getSerialNumber());
-            entry.setInstanceId();
-            publishToConnector(entry, redisEntry.getEqType());
+            //TODO
+            entry.setDispatcherId("1");
+            //TODO
+            entry.setConnectorId("");
+            publishToConnector(entry, redisEntry.getEqType(),equipmentDTO.getSerialNumber());
         }
 
     }
@@ -74,11 +76,13 @@ public class DeviceInstructionServiceImpl extends CommonUtil implements DeviceIn
      * @param entry 事件
      * @param eqType 设备类型
      */
-    private void publishToConnector(TransportEventEntry entry, Integer eqType) {
+    private void publishToConnector(TransportEventEntry entry, Integer eqType,String seriaNumber) {
         EquipmentTypeEnum equipmentTypeEnum = EquipmentTypeEnum.getEnumByCode(eqType);
         if (equipmentTypeEnum != null) {
-            mqConnector.publishSync(equipmentTypeEnum.getQueueName(), gson.toJson(entry),
-                    String.valueOf(IdGenerator.buildDistributedId()));
+            String eqName = configCenter.getEquipmentTypeRegistry().get(eqType);
+            String downQueueName = mqConnector.getDownQueueName(eqName);
+            mqConnector.publishSync(downQueueName, gson.toJson(entry),
+                    seriaNumber);
         } else {
             log.error("设备类型错误,event:{},eqType:{}", entry, eqType);
         }
