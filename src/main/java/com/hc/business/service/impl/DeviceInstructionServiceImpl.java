@@ -5,15 +5,17 @@ import com.hc.business.dal.EquipmentDAL;
 import com.hc.business.dal.dao.EquipmentRegistry;
 import com.hc.business.dto.EquipmentDTO;
 import com.hc.business.service.DeviceInstructionService;
-import com.hc.configuration.ConfigCenter;
-import com.hc.message.MqConnector;
-import com.hc.message.RedisEntry;
-import com.hc.message.TransportEventEntry;
-import com.hc.type.EquipmentTypeEnum;
+import com.hc.configuration.CommonConfig;
+import com.hc.dispatch.event.handler.EquipmentLogin;
+import com.hc.rpc.MqConnector;
+import com.hc.rpc.SessionEntry;
+import com.hc.rpc.TransportEventEntry;
+import com.hc.rpc.serialization.Trans;
 import com.hc.util.CommonUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
+import org.springframework.util.StringUtils;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
@@ -38,53 +40,44 @@ public class DeviceInstructionServiceImpl extends CommonUtil implements DeviceIn
     @Resource
     private MqConnector mqConnector;
     @Resource
-    private ConfigCenter configCenter;
-    public static final String CACHE_MAP = "device_session";
-
+    private CommonConfig commonConfig;
     @Override
-    public void publishInstruction(EquipmentDTO equipmentDTO) {
+    public TransportEventEntry publishInstruction(EquipmentDTO equipmentDTO) {
         String device;
         String md5UniqueId = equipmentDTO.getUniqueId();
         try (Jedis jedis = jedisPool.getResource()) {
-            device = jedis.hget(CACHE_MAP, md5UniqueId);
+            device = jedis.hget(EquipmentLogin.SESSION_MAP, md5UniqueId);
         }
-        if (device == null) {
-            List<EquipmentRegistry> equipment =
-                    equipmentDAL.getByUniqueId(md5UniqueId);
+        if (StringUtils.isEmpty(device)) {
+            List<EquipmentRegistry> equipment = equipmentDAL.getByUniqueId(md5UniqueId);
             if (CollectionUtils.isEmpty(equipment)) {
                 throw new RuntimeException("该设备不存在或未注册");
             } else {
                 throw new RuntimeException("该设备不在线");
             }
         } else {
-            RedisEntry redisEntry = gson.fromJson(device, RedisEntry.class);
-            TransportEventEntry entry = new TransportEventEntry();
-            entry.setEqId(redisEntry.getEqId());
-            entry.setEqType(redisEntry.getEqType());
-            entry.setMsg(equipmentDTO.getInstruction());
-            entry.setSerialNumber(equipmentDTO.getSerialNumber());
-            //TODO
-            entry.setDispatcherId("1");
-            //TODO
-            entry.setConnectorId("");
-            publishToConnector(entry, redisEntry.getEqType(),equipmentDTO.getSerialNumber());
-        }
-
-    }
-    /**
-     * 推送给connector
-     * @param entry 事件
-     * @param eqType 设备类型
-     */
-    private void publishToConnector(TransportEventEntry entry, Integer eqType,String seriaNumber) {
-        EquipmentTypeEnum equipmentTypeEnum = EquipmentTypeEnum.getEnumByCode(eqType);
-        if (equipmentTypeEnum != null) {
-            String eqName = configCenter.getEquipmentTypeRegistry().get(eqType);
-            String downQueueName = mqConnector.getDownQueueName(eqName);
-            mqConnector.publishSync(downQueueName, gson.toJson(entry),
-                    seriaNumber);
-        } else {
-            log.error("设备类型错误,event:{},eqType:{}", entry, eqType);
+            SessionEntry sessionEntry = gson.fromJson(device, SessionEntry.class);
+            String eqId = sessionEntry.getEqId();
+            Integer eqType = sessionEntry.getEqType();
+            String node = sessionEntry.getNode();
+            Trans.event_data.Builder entry = Trans.event_data.newBuilder();
+            String serialNumber = equipmentDTO.getSerialNumber();
+            String instruction = equipmentDTO.getInstruction();
+            Boolean autoAck = equipmentDTO.getAutoAck();
+            byte[] bytes = entry.setEqId(eqId).
+                    setMsg(instruction).
+                    setSerialNumber(serialNumber).
+                    setDispatcherId(commonConfig.getDispatcherId()).
+                    setNodeArtifactId(node).
+                    setTimeStamp(System.currentTimeMillis()).
+                    build().toByteArray();
+            String routingKey = mqConnector.getRoutingKey(eqType);
+            if (autoAck) {
+                return mqConnector.publishSync(routingKey, serialNumber, bytes);
+            } else {
+                mqConnector.publish(routingKey, bytes);
+                return null;
+            }
         }
     }
 

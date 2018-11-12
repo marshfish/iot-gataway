@@ -1,6 +1,6 @@
 package com.hc.dispatch.event;
 
-import com.hc.message.TransportEventEntry;
+import com.hc.rpc.TransportEventEntry;
 import com.hc.type.EventTypeEnum;
 import lombok.extern.slf4j.Slf4j;
 

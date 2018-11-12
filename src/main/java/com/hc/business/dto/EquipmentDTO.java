@@ -13,8 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 public class EquipmentDTO {
     /**
      * 指令流水号
-     * 根据HTTP request自动生成
-     * 相当于本条指令的主键
+     * 由业务系统生成
      */
     @NotNull
     private String serialNumber;
@@ -22,17 +21,12 @@ public class EquipmentDTO {
      * 挂起请求并返回设备响应结果
      */
     @NotNull
-    private boolean autoAck;
+    private Boolean autoAck;
     /**
      * 设备系统唯一ID
      */
     @NotNull
     private String uniqueId;
-    /**
-     * 指令协议号
-     */
-    @NotNull
-    private String protocolNumber;
     /**
      * 指令
      */

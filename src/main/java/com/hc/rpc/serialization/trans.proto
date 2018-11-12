@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+message event_data {
+	//注意，1-16占1个字节，16以上占2个字节，如果要扩展字段且超过了16个，尽量把常用字段放到1-16里.使用sfixed定长int替代可变长int
+	//必填，消息类型
+    sfixed32 type = 1;
+	//必填，消息流水号
+	string serialNumber = 2;
+	//必填，时间戳
+	sfixed64 timeStamp = 3;
+	//必填，connector节点ID
+    string nodeArtifactId = 4;
+	
+	string eqId = 5;
+  
+    sfixed32 eqType = 6;
+   
+    string dispatcherId = 7;
+    
+    sfixed32 protocol = 8;
+   
+    string msg = 9;
+    
+    sfixed32 profile = 10;
+    
+    string eqQueueName = 11;
+	
+	string uri = 12;
+    
+}

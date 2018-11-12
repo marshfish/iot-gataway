@@ -18,7 +18,7 @@ public @interface Route {
      */
     HttpMethod method() default HttpMethod.GET;
     /**
-     * descKey
+     * description
      */
     String desc() default "";
 }

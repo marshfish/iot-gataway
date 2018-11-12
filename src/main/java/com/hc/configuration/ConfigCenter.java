@@ -8,8 +8,8 @@ import com.hc.business.dto.ConfigDTO;
 import com.hc.type.ConfigTypeEnum;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.InitializingBean;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.CollectionUtils;
 
 import javax.annotation.Resource;
@@ -18,7 +18,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Consumer;
 
 /**
  * 配置中心本地缓存
@@ -31,19 +30,24 @@ public class ConfigCenter implements Bootstrap {
     @Resource
     private ConfigurationDAL configurationDAL;
     @Getter
-    private Map<Integer, String> equipmentTypeRegistry = new ConcurrentHashMap<>(5);
+    private Map<Integer, String> equipmentTypeRegistry;
     @Getter
-    private Map<Integer, String> profileRegistry = new ConcurrentHashMap<>(5);
+    private Map<Integer, String> profileRegistry;
     @Getter
-    private Map<Integer, String> protocolRegistry = new ConcurrentHashMap<>(5);
+    private Map<Integer, String> protocolRegistry;
 
     /**
      * 添加设备类型
      *
      * @param configDTO configDTO
      */
+    @Transactional
     public void addEquipmentType(ConfigDTO configDTO) {
-        equipmentTypeRegistry.putIfAbsent(configDTO.getType(), configDTO.getDesc());
+        Integer type = configDTO.getType();
+        if (existEquipmentType(type)) {
+            throw new RuntimeException("已存在该设备类型");
+        }
+        equipmentTypeRegistry.putIfAbsent(type, configDTO.getDescriptor());
         Configuration equipmentType = getConfiguration(configDTO, ConfigTypeEnum.EQUIPMENT_TYPE.getType());
         configurationDAL.save(equipmentType);
     }
@@ -53,8 +57,13 @@ public class ConfigCenter implements Bootstrap {
      *
      * @param configDTO configDTO
      */
+    @Transactional
     public void addProfile(ConfigDTO configDTO) {
-        profileRegistry.putIfAbsent(configDTO.getType(), configDTO.getDesc());
+        Integer type = configDTO.getType();
+        if (existProfileType(type)) {
+            throw new RuntimeException("已存在该环境类型及回调地址");
+        }
+        profileRegistry.putIfAbsent(type, configDTO.getDescriptor());
         Configuration equipmentProfile = getConfiguration(configDTO, ConfigTypeEnum.ARTIFACT_PROFILE.getType());
         configurationDAL.save(equipmentProfile);
     }
@@ -64,8 +73,13 @@ public class ConfigCenter implements Bootstrap {
      *
      * @param configDTO configDTO
      */
+    @Transactional
     public void addProtocol(ConfigDTO configDTO) {
-        protocolRegistry.putIfAbsent(configDTO.getType(), configDTO.getDesc());
+        Integer type = configDTO.getType();
+        if (existProtocolType(type)) {
+            throw new RuntimeException("已存在该协议类型");
+        }
+        protocolRegistry.putIfAbsent(configDTO.getType(), configDTO.getDescriptor());
         Configuration equipmentProtocol = getConfiguration(configDTO, ConfigTypeEnum.PROTOCOL.getType());
         configurationDAL.save(equipmentProtocol);
     }
@@ -80,8 +94,11 @@ public class ConfigCenter implements Bootstrap {
     private Configuration getConfiguration(ConfigDTO configDTO, Integer configType) {
         Configuration configuration = new Configuration();
         configuration.setConfigType(configType);
-        configuration.setValue(configDTO.getType());
-        configuration.setDescKey(configDTO.getDesc());
+        configuration.setType(configDTO.getType());
+        configuration.setDescription(configDTO.getDescriptor());
+        long now = System.currentTimeMillis();
+        configuration.setCreateTime(now);
+        configuration.setUpdateTime(now);
         return configuration;
     }
 
@@ -90,9 +107,10 @@ public class ConfigCenter implements Bootstrap {
      *
      * @param type 设备类型
      */
+    @Transactional
     public void removeEquipmentType(int type) {
         protocolRegistry.remove(type);
-        configurationDAL.removeByDescKeyAndConfigType(type, ConfigTypeEnum.EQUIPMENT_TYPE.getType());
+        configurationDAL.removeByTypeAndConfigType(type, ConfigTypeEnum.EQUIPMENT_TYPE.getType());
     }
 
     /**
@@ -100,9 +118,10 @@ public class ConfigCenter implements Bootstrap {
      *
      * @param type 环境类型
      */
+    @Transactional
     public void removeProfile(int type) {
         profileRegistry.remove(type);
-        configurationDAL.removeByDescKeyAndConfigType(type, ConfigTypeEnum.ARTIFACT_PROFILE.getType());
+        configurationDAL.removeByTypeAndConfigType(type, ConfigTypeEnum.ARTIFACT_PROFILE.getType());
     }
 
     /**
@@ -110,9 +129,10 @@ public class ConfigCenter implements Bootstrap {
      *
      * @param type 协议类型
      */
+    @Transactional
     public void removeProtocol(int type) {
         protocolRegistry.remove(type);
-        configurationDAL.removeByDescKeyAndConfigType(type, ConfigTypeEnum.PROTOCOL.getType());
+        configurationDAL.removeByTypeAndConfigType(type, ConfigTypeEnum.PROTOCOL.getType());
     }
 
     public boolean existEquipmentType(int type) {
@@ -139,17 +159,20 @@ public class ConfigCenter implements Bootstrap {
         }
     }
 
+    /**
+     * 查看DB中是否存在该配置，若存在，则说明配置被动态更新了，刷新缓存
+     */
     private boolean existDB(int type, ConfigTypeEnum configType) {
         List collection;
         switch (configType) {
             case EQUIPMENT_TYPE:
-                collection = configurationDAL.getByDescKeyAndConfigType(type, ConfigTypeEnum.EQUIPMENT_TYPE.getType());
+                collection = configurationDAL.getByTypeAndConfigType(type, ConfigTypeEnum.EQUIPMENT_TYPE.getType());
                 break;
             case ARTIFACT_PROFILE:
-                collection = configurationDAL.getByDescKeyAndConfigType(type, ConfigTypeEnum.ARTIFACT_PROFILE.getType());
+                collection = configurationDAL.getByTypeAndConfigType(type, ConfigTypeEnum.ARTIFACT_PROFILE.getType());
                 break;
             case PROTOCOL:
-                collection = configurationDAL.getByDescKeyAndConfigType(type, ConfigTypeEnum.PROTOCOL.getType());
+                collection = configurationDAL.getByTypeAndConfigType(type, ConfigTypeEnum.PROTOCOL.getType());
                 break;
             default:
                 return false;
@@ -171,17 +194,17 @@ public class ConfigCenter implements Bootstrap {
         switch (type) {
             case EQUIPMENT_TYPE:
                 configurationDAL.getByConfigType(ConfigTypeEnum.EQUIPMENT_TYPE.getType()).
-                        forEach(configuration -> newMap.put(configuration.getValue(), configuration.getDescKey()));
+                        forEach(configuration -> newMap.put(configuration.getType(), configuration.getDescription()));
                 equipmentTypeRegistry = newMap;
                 break;
             case ARTIFACT_PROFILE:
                 configurationDAL.getByConfigType(ConfigTypeEnum.ARTIFACT_PROFILE.getType()).
-                        forEach(configuration -> newMap.put(configuration.getValue(), configuration.getDescKey()));
+                        forEach(configuration -> newMap.put(configuration.getType(), configuration.getDescription()));
                 profileRegistry = newMap;
                 break;
             case PROTOCOL:
                 configurationDAL.getByConfigType(ConfigTypeEnum.PROTOCOL.getType()).
-                        forEach(configuration -> newMap.put(configuration.getValue(), configuration.getDescKey()));
+                        forEach(configuration -> newMap.put(configuration.getType(), configuration.getDescription()));
                 protocolRegistry = newMap;
                 break;
             default:
@@ -201,12 +224,13 @@ public class ConfigCenter implements Bootstrap {
 
     /**
      * 根据配置类型获取详细配置
+     *
      * @param configType 配置类型
      */
     public Map<Integer, String> getConfigByConfigType(Integer configType) {
         List<Configuration> byConfigType = configurationDAL.getByConfigType(configType);
         HashMap<Integer, String> map = new HashMap<>();
-        byConfigType.forEach(configuration -> map.put(configuration.getValue(), configuration.getDescKey()));
+        byConfigType.forEach(configuration -> map.put(configuration.getType(), configuration.getDescription()));
         return map;
     }
 

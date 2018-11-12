@@ -5,7 +5,7 @@ import com.hc.LoadOrder;
 import com.hc.configuration.CommonConfig;
 import com.hc.dispatch.event.EventHandlerPipeline;
 import com.hc.dispatch.event.PipelineContainer;
-import com.hc.message.TransportEventEntry;
+import com.hc.rpc.TransportEventEntry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -29,8 +29,8 @@ public class MqEventUpStream implements Bootstrap {
     private CommonConfig commonConfig;
     @Resource
     private PipelineContainer pipelineContainer;
-    private static Queue<TransportEventEntry> eventQueue;
-    private static ExecutorService eventExecutor;
+    private  Queue<TransportEventEntry> eventQueue;
+    private  ExecutorService eventExecutor;
 
     private void initQueue() {
         eventQueue = new LinkedBlockingQueue<>(commonConfig.getEventBusQueueSize());
@@ -39,7 +39,7 @@ public class MqEventUpStream implements Bootstrap {
 
             @Override
             public Thread newThread(Runnable r) {
-                Thread thread = new Thread();
+                Thread thread = new Thread(r);
                 thread.setDaemon(true);
                 thread.setName("event-poller-" + count.getAndIncrement());
                 return thread;

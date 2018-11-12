@@ -36,14 +36,8 @@ public class MqConfig {
      */
     private String upQueueName;
     /**
-     * 下行队列名
-     */
-    private String downQueueName;
-    /**
      * 交换机名
      */
     private String exchangeName;
-    private long maxBusBlockingTime;
-
 
 }

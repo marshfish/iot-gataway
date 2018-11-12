@@ -1,12 +1,14 @@
 package com.hc.dispatch;
 
 import com.google.gson.Gson;
+import com.google.protobuf.InvalidProtocolBufferException;
 import com.hazelcast.config.Config;
 import com.hazelcast.config.GroupConfig;
 import com.hc.Bootstrap;
 import com.hc.LoadOrder;
 import com.hc.configuration.CommonConfig;
-import com.hc.message.TransportEventEntry;
+import com.hc.rpc.TransportEventEntry;
+import com.hc.rpc.serialization.Trans;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.DeploymentOptions;
 import io.vertx.core.Handler;
@@ -71,10 +73,15 @@ public class ClusterManager implements Bootstrap {
         log.info("load and listen eventBus ");
         //TODO
         eventBus.consumer(commonConfig.getDispatcherId(),
-                (Handler<Message<String>>) event -> {
-                    String eventJson = event.body();
-                    TransportEventEntry eventEntry = gson.fromJson(eventJson, TransportEventEntry.class);
-                    eventUpStream.handlerMessage(eventEntry);
+                (Handler<Message<byte[]>>) event -> {
+                    byte[] bytes = event.body();
+                    try {
+                        Trans.event_data eventData = Trans.event_data.parseFrom(bytes);
+                        TransportEventEntry eventEntry = TransportEventEntry.parseTrans2This(eventData);
+                        eventUpStream.handlerMessage(eventEntry);
+                    } catch (InvalidProtocolBufferException e) {
+                        e.printStackTrace();
+                    }
                 });
     }
 

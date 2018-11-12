@@ -1,11 +1,7 @@
 package com.hc.util;
 
-import com.hc.DispatcherApplication;
-import com.hc.dispatch.ClusterManager;
 import com.hc.exception.NullParamException;
 import com.hc.mvc.NotNull;
-import io.vertx.core.eventbus.DeliveryOptions;
-import io.vertx.core.http.CaseInsensitiveHeaders;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.util.DigestUtils;
@@ -51,7 +47,6 @@ public class CommonUtil {
             }
         }
     }
-    //TODO 性能优化
     public void validDTOEmpty(Object dto) {
         if (null == dto) {
             throw new NullParamException("DTO");

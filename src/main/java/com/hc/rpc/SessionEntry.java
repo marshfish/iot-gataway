@@ -1,12 +1,12 @@
-package com.hc.message;
+package com.hc.rpc;
 
 import lombok.Data;
 
 /**
- * redis缓存数据结构
+ * redis设备会话数据结构
  */
 @Data
-public class RedisEntry {
+public class SessionEntry {
     /**
      * 设备唯一ID
      */
@@ -20,8 +20,8 @@ public class RedisEntry {
      */
     private Integer eqType;
     /**
-     * 设备协议
+     * 设备所属节点ID
      */
-    private Integer protocol;
+    private String node;
 
 }

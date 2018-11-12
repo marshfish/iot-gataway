@@ -1,12 +1,8 @@
 package com.hc.dispatch.event.handler;
 
-import com.google.gson.Gson;
-import com.hc.business.dal.EquipmentDAL;
-import com.hc.dispatch.MqEventUpStream;
 import com.hc.dispatch.event.AsyncEventHandler;
 import com.hc.exception.NullParamException;
-import com.hc.message.MqConnector;
-import com.hc.message.TransportEventEntry;
+import com.hc.rpc.TransportEventEntry;
 import com.hc.type.EventTypeEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -19,28 +15,18 @@ import javax.annotation.Resource;
 @Component
 public class EquipmentLogout extends AsyncEventHandler {
     @Resource
-    private EquipmentDAL equipmentDAL;
-    @Resource
     private JedisPool jedisPool;
-    @Resource
-    private Gson gson;
-    @Resource
-    private MqConnector mqConnector;
-    public static final String CACHE_MAP = "device_session";
-    @Resource
-    private MqEventUpStream mqEventUpStream;
 
     @Override
     public void accept(TransportEventEntry event) {
-        try {
-            validDTOEmpty(event);
-        } catch (NullParamException e) {
-            log.warn("设备登出事件异常：{}", e.getMessage());
-            return;
-        }
-        String md5UniqueId = MD5(event.getEqType() + event.getEqId());
+        String eqId = event.getEqId();
+        Integer eqType = event.getEqType();
+        validEmpty("设备ID", eqId);
+        validEmpty("设备类型", eqType);
+        String md5UniqueId = MD5(eqType + eqId);
+        log.info("设备{} 退出登录", md5UniqueId);
         try (Jedis jedis = jedisPool.getResource()) {
-            jedis.hdel(CACHE_MAP, md5UniqueId);
+            jedis.hdel(EquipmentLogin.SESSION_MAP, md5UniqueId);
         }
     }
 

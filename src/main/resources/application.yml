@@ -16,7 +16,7 @@ spring:
             auto: update
 dispatcher:
   commons:
-    artifactId: dispatcher_1
+    dispatcherId: dispatcher_1
     host: 0.0.0.0
     httpPort: 8888
     maxHTTPIdleTime: 5
@@ -33,11 +33,11 @@ dispatcher:
     maxIdle: 3000
     maxWaitMills: 3000
     testOnBorrow: true
-    address: 127.0.0.1
+    address: 39.105.125.26
     port: 6379
     maxWait: 3000
-    auth:
-    databaseIndex: 0
+    auth: qweasdzxc~!@#
+    databaseIndex: 5
     keyExpire: 180
   rabbitmq:
     mqHost: 39.105.125.26

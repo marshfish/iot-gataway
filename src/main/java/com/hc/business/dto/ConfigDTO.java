@@ -11,5 +11,5 @@ public class ConfigDTO {
     @NotNull
     private Integer type;
     @NotNull
-    private String desc;
+    private String descriptor;
 }

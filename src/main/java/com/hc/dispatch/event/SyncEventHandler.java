@@ -2,7 +2,7 @@ package com.hc.dispatch.event;
 
 
 import com.hc.dispatch.CallbackManager;
-import com.hc.message.TransportEventEntry;
+import com.hc.rpc.TransportEventEntry;
 import com.hc.util.CommonUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeansException;

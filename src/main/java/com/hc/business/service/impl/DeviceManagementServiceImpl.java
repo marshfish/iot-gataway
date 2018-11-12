@@ -35,6 +35,7 @@ public class DeviceManagementServiceImpl extends CommonUtil implements DeviceMan
         Integer equipmentType = equipmentDTO.getEquipmentType();
         Integer profile = equipmentDTO.getEquipmentProfile();
         Integer protocol = equipmentDTO.getEquipmentProtocol();
+        String equipmentId = equipmentDTO.getEquipmentId();
         //根据配置中心校验
         if (!configCenter.existEquipmentType(equipmentType)) {
             throw new RuntimeException("该设备类型不存在，需要配置设备类型");
@@ -46,7 +47,7 @@ public class DeviceManagementServiceImpl extends CommonUtil implements DeviceMan
             throw new RuntimeException("该协议不存在，需要配置协议支持");
         }
         //校验是否已注册
-        String md5UniqueId = MD5(equipmentType + equipmentDTO.getEquipmentId());
+        String md5UniqueId = MD5(equipmentType + equipmentId);
         List<EquipmentRegistry> exist = equipmentDAL.getByUniqueId(md5UniqueId);
         if (!CollectionUtils.isEmpty(exist)) {
             throw new RuntimeException("该设备已被注册");
@@ -55,7 +56,7 @@ public class DeviceManagementServiceImpl extends CommonUtil implements DeviceMan
         //注册
         EquipmentRegistry equipmentRegistry = new EquipmentRegistry();
         equipmentRegistry.setUniqueId(md5UniqueId);
-        equipmentRegistry.setEquipmentId(equipmentDTO.getEquipmentId());
+        equipmentRegistry.setEquipmentId(equipmentId);
         equipmentRegistry.setEquipmentProfile(profile);
         equipmentRegistry.setEquipmentProtocol(protocol);
         equipmentRegistry.setEquipmentType(equipmentType);

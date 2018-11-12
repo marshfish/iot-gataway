@@ -1,4 +1,4 @@
-package com.hc.message;
+package com.hc.rpc;
 
 import lombok.Data;
 

@@ -7,9 +7,9 @@ import org.springframework.data.repository.CrudRepository;
 import java.util.List;
 
 public interface ConfigurationDAL extends CrudRepository<Configuration, Long>, JpaSpecificationExecutor<Configuration> {
-    int removeByDescKeyAndConfigType(Integer type,Integer configType);
+    int removeByTypeAndConfigType(Integer type, Integer configType);
 
-    List<Configuration> getByDescKeyAndConfigType(Integer type,Integer configType);
+    List<Configuration> getByTypeAndConfigType(Integer type, Integer configType);
 
     List<Configuration> getByConfigType(Integer configType);
 }

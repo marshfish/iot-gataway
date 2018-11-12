@@ -6,6 +6,7 @@ import com.hc.business.vo.BaseResult;
 import com.hc.mvc.HttpMethod;
 import com.hc.mvc.RestManager;
 import com.hc.mvc.Route;
+import com.hc.rpc.TransportEventEntry;
 import com.hc.util.CommonUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Controller;
@@ -25,8 +26,8 @@ public class DeviceInstructionController extends CommonUtil {
     @Route(value = "/publish", method = HttpMethod.POST, desc = "推送设备指令")
     public BaseResult publishInstruction(EquipmentDTO equipmentDTO) {
         validDTOEmpty(equipmentDTO);
-        deviceInstructionService.publishInstruction(equipmentDTO);
-        return BaseResult.getInstance();
+        TransportEventEntry result = deviceInstructionService.publishInstruction(equipmentDTO);
+        return new BaseResult(result);
     }
 
     @Route(value = "/registry/valid", method = HttpMethod.POST, desc = "校验设备是否注册")

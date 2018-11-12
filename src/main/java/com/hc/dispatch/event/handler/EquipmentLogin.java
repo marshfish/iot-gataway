@@ -5,12 +5,12 @@ import com.hc.business.dal.EquipmentDAL;
 import com.hc.business.dal.dao.EquipmentRegistry;
 import com.hc.configuration.ConfigCenter;
 import com.hc.dispatch.event.AsyncEventHandler;
-import com.hc.exception.NullParamException;
-import com.hc.message.MqConnector;
-import com.hc.message.RedisEntry;
-import com.hc.message.TransportEventEntry;
-import com.hc.type.EquipmentTypeEnum;
+import com.hc.rpc.SessionEntry;
+import com.hc.rpc.MqConnector;
+import com.hc.rpc.TransportEventEntry;
+import com.hc.rpc.serialization.Trans;
 import com.hc.type.EventTypeEnum;
+import com.hc.util.IdGenerator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
@@ -35,50 +35,66 @@ public class EquipmentLogin extends AsyncEventHandler {
     private MqConnector mqConnector;
     @Resource
     private ConfigCenter configCenter;
-    public static final String CACHE_MAP = "device_session";
+    public static final String SESSION_MAP = "device_session";
 
     @Override
     public void accept(TransportEventEntry event) {
-        try {
-            validDTOEmpty(event);
-        } catch (NullParamException e) {
-            log.warn("设备登陆事件异常：{}", e.getMessage());
-            return;
-        }
-        String md5UniqueId = MD5(event.getEqType() + event.getEqId());
+        Integer eqType = event.getEqType();
+        String eqId = event.getEqId();
+        String nodeArtifactId = event.getNodeArtifactId();
+        String eqQueueName = event.getEqQueueName();
+        validEmpty("节点ID", nodeArtifactId);
+        validEmpty("设备类型", eqType);
+        validEmpty("设备唯一ID", eqId);
+        validEmpty("设备队列名", eqQueueName);
+        //uniqueId规则，MD5(设备类型+设备ID)
+        String md5UniqueId = MD5(eqType + eqId);
         List<EquipmentRegistry> equipment = equipmentDAL.getByUniqueId(md5UniqueId);
+        //设备尚未注册
         if (CollectionUtils.isEmpty(equipment)) {
-            //设备尚未注册
             log.warn("设备登陆失败，未注册，{}", event);
-            event.setMsg("设备登陆失败，未注册");
-            event.setType(EventTypeEnum.LOGIN_FAIL.getType());
-            event.setConnectorId("");
-            publishToConnector(event, event.getEqType());
+            Trans.event_data.Builder response = Trans.event_data.newBuilder();
+            byte[] bytes = response.setMsg("设备登陆失败，未注册").
+                    setType(EventTypeEnum.LOGIN_FAIL.getType()).
+                    setNodeArtifactId(nodeArtifactId).
+                    setEqId(eqId).
+                    setSerialNumber(String.valueOf(IdGenerator.buildDistributedId())).
+                    setTimeStamp(System.currentTimeMillis()).
+                    build().toByteArray();
+            publishToConnector(bytes, eqQueueName, nodeArtifactId);
         } else {
             //设备已注册
+            Long hsetnx;
             EquipmentRegistry registry = equipment.get(0);
             try (Jedis jedis = jedisPool.getResource()) {
-                RedisEntry redisEntry = new RedisEntry();
-                redisEntry.setEqId(event.getEqId());
-                redisEntry.setProfile(registry.getEquipmentProfile());
-                redisEntry.setProtocol(registry.getEquipmentProtocol());
-                redisEntry.setEqType(registry.getEquipmentType());
-                Long hsetnx = jedis.hsetnx(CACHE_MAP, md5UniqueId, gson.toJson(redisEntry));
-                if (hsetnx == 1) {
-                    log.info("设备类型：【{}】，ID:【{}】从【{}】登陆", event.getEqType(),
-                            event.getEqId(), event.getConnectorId());
-                    //返回登陆成功事件，传入环境配置
-                    event.setType(EventTypeEnum.LOGIN_SUCCESS.getType());
-                    event.setProfile(registry.getEquipmentProfile());
-                    event.setDispatcherId("1");
-                    publishToConnector(event, registry.getEquipmentType());
-                } else {
-                    log.warn("设备登陆失败，设备已登陆，{}", event);
-                    event.setType(EventTypeEnum.LOGIN_FAIL.getType());
-                    event.setMsg("设备登陆失败，设备已登陆");
-                    event.setDispatcherId("1");
-                    publishToConnector(event, event.getEqType());
-                }
+                SessionEntry eqSession = new SessionEntry();
+                eqSession.setEqId(eqId);
+                eqSession.setProfile(registry.getEquipmentProfile());
+                eqSession.setEqType(registry.getEquipmentType());
+                hsetnx = jedis.hsetnx(SESSION_MAP, md5UniqueId, gson.toJson(eqSession));
+            }
+            if (hsetnx == 1) {
+                log.info("设备类型：【{}】，ID:【{}】从【{}】节点登陆", eqType, eqId, nodeArtifactId);
+                //返回登陆成功事件，传入环境配置
+                Trans.event_data.Builder response = Trans.event_data.newBuilder();
+                byte[] bytes = response.setType(EventTypeEnum.LOGIN_SUCCESS.getType()).
+                        setNodeArtifactId(nodeArtifactId).
+                        setEqId(eqId).
+                        setSerialNumber(String.valueOf(IdGenerator.buildDistributedId())).
+                        setTimeStamp(System.currentTimeMillis()).
+                        build().toByteArray();
+                publishToConnector(bytes, eqQueueName, nodeArtifactId);
+            } else {
+                log.warn("设备登陆失败，设备已登陆，{}", event);
+                Trans.event_data.Builder response = Trans.event_data.newBuilder();
+                byte[] bytes = response.setMsg("设备登陆失败，设备已登陆").
+                        setType(EventTypeEnum.LOGIN_FAIL.getType()).
+                        setNodeArtifactId(nodeArtifactId).
+                        setEqId(eqId).
+                        setSerialNumber(String.valueOf(IdGenerator.buildDistributedId())).
+                        setTimeStamp(System.currentTimeMillis()).
+                        build().toByteArray();
+                publishToConnector(bytes, eqQueueName, nodeArtifactId);
             }
         }
     }
@@ -86,20 +102,13 @@ public class EquipmentLogin extends AsyncEventHandler {
     /**
      * 推送给connector
      *
-     * @param entry  事件
-     * @param eqType 设备类型
+     * @param bytes       事件
+     * @param eqQueueName 设备队列名
      */
-    private void publishToConnector(TransportEventEntry entry, Integer eqType) {
-        EquipmentTypeEnum equipmentTypeEnum = EquipmentTypeEnum.getEnumByCode(eqType);
-        if (equipmentTypeEnum != null) {
-            String eqName = configCenter.getEquipmentTypeRegistry().get(eqType);
-            String downQueueName = mqConnector.getDownQueueName(eqName);
-            Map<String, Object> headers = new HashMap<>();
-            headers.put("connectorId",entry.getDispatcherId());
-            mqConnector.publish(downQueueName, gson.toJson(entry));
-        } else {
-            log.error("设备类型错误,event:{},eqType:{}", entry, eqType);
-        }
+    private void publishToConnector(byte[] bytes, String eqQueueName, String nodeArtifactId) {
+        Map<String, Object> headers = new HashMap<>();
+        headers.put(MqConnector.CONNECTOR_ID, nodeArtifactId);
+        mqConnector.publish(eqQueueName, bytes);
     }
 
     @Override

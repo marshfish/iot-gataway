@@ -110,7 +110,6 @@ public class DispatcherProxy implements Bootstrap {
                 });
     }
 
-    //TODO 重构
     private void AckDynamicPipeline(String requestId, boolean needAck) {
         PipelineContainer pipelineContainer = SpringContextUtil.getBean(PipelineContainer.class);
         EventHandlerPipeline defaultPipeline = pipelineContainer.getDefaultPipeline();
@@ -118,11 +117,10 @@ public class DispatcherProxy implements Bootstrap {
         if (needAck) {
             //覆盖默认pipeline的同步/异步连接响应处理器
             thisPipeline.addEventHandler(SpringContextUtil.getBean(ReceiveResponseSync.class));
-            pipelineContainer.addPipeline(requestId, thisPipeline);
         } else {
             thisPipeline.addEventHandler(SpringContextUtil.getBean(ReceiveResponseAsync.class));
-            pipelineContainer.addPipeline(requestId, thisPipeline);
         }
+        pipelineContainer.addPipeline(requestId, thisPipeline);
     }
 
 }

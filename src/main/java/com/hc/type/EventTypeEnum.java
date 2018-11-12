@@ -43,7 +43,7 @@ public enum EventTypeEnum {
     public String toString() {
         return "EventTypeEnum{" +
                 "type=" + type +
-                ", desc='" + desc + '\'' +
+                ", description='" + desc + '\'' +
                 '}';
     }
 }

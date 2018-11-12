@@ -1,6 +1,6 @@
 package com.hc.dispatch;
 
-import com.hc.message.TransportEventEntry;
+import com.hc.rpc.TransportEventEntry;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Controller;
 

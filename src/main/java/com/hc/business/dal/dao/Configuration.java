@@ -17,13 +17,13 @@ public class Configuration {
      */
     private Integer configType;
     /**
-     * 键
-     */
-    private String descKey;
-    /**
      * 值
      */
-    private Integer value;
+    private Integer type;
+    /**
+     * 键
+     */
+    private String description;
     /**
      * 创建时间
      */

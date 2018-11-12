@@ -1,8 +1,8 @@
 package com.hc.dispatch.event;
 
 
-import com.hc.message.MqConnector;
-import com.hc.message.TransportEventEntry;
+import com.hc.rpc.MqConnector;
+import com.hc.rpc.TransportEventEntry;
 
 import java.util.function.Consumer;
 
@@ -23,7 +23,7 @@ import java.util.function.Consumer;
  *      RabbitMq发送消息 -> eventBus转发消息-> 相应节点的MqEventDownStream事件循环获取到事件，分配给EventHandler ->
  *      SyncEventHandler调用handler方法 -> CallbackManager获取同步回调的mockCallback -> 将响应结果set到Warpper里，并唤醒主线程 ->
  *      返回Warpper中的响应结果
- * rabbitmq发送消息详见{@link MqConnector#publishSync(String, String, String)}
+ * rabbitmq发送消息详见{@link MqConnector#publishSync(String, String, byte[])}
  */
 public interface EventHandler extends Consumer<TransportEventEntry>{
     /**
