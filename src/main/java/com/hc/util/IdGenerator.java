@@ -1,15 +1,13 @@
 package com.hc.util;
 
 
-
-import com.hc.configuration.CommonConfig;
-
+import java.util.Random;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class IdGenerator {
 
     private static AtomicInteger index = new AtomicInteger(1);
-    private static SnowFlake snowFlake = new SnowFlake(0, SpringContextUtil.getBean(CommonConfig.class).getInstanceNumber());
+    private static SnowFlake snowFlake = new SnowFlake();
 
     public static int buildCASId() {
         for (; ; ) {
@@ -100,8 +98,9 @@ public class IdGenerator {
 
 
         public SnowFlake() {
-            this(0, 0);
+            this((long) (new Random().nextInt(30) + 1), (long) (new Random().nextInt(30) + 1));
         }
+
 
         /**
          * 构造函数

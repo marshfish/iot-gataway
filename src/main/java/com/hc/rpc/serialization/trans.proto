@@ -26,5 +26,9 @@ message event_data {
     string eqQueueName = 11;
 	
 	string uri = 12;
+	
+	sfixed32 qos = 13;
+	
+	sfixed32 reTryTimeout = 14;
     
 }

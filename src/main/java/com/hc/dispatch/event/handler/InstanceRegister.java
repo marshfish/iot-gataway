@@ -1,32 +1,28 @@
 package com.hc.dispatch.event.handler;
 
 import com.google.gson.Gson;
-import com.google.gson.internal.LinkedTreeMap;
 import com.hc.configuration.CommonConfig;
 import com.hc.configuration.ConfigCenter;
 import com.hc.configuration.RedisConfig;
 import com.hc.dispatch.event.AsyncEventHandler;
 import com.hc.rpc.MqConnector;
 import com.hc.rpc.NodeEntry;
+import com.hc.rpc.PublishEvent;
 import com.hc.rpc.TransportEventEntry;
 import com.hc.rpc.serialization.Trans;
 import com.hc.type.ConfigTypeEnum;
 import com.hc.type.EventTypeEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
-import org.springframework.util.DigestUtils;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
 import javax.annotation.Resource;
-import java.io.UnsupportedEncodingException;
-import java.util.HashMap;
 import java.util.Map;
 
 @Slf4j
 @Component
 public class InstanceRegister extends AsyncEventHandler {
-    private static final String INSTANCE_REGISTRY = "nodeRegistry";
     @Resource
     private JedisPool jedisPool;
     @Resource
@@ -39,6 +35,7 @@ public class InstanceRegister extends AsyncEventHandler {
     private RedisConfig redisConfig;
     @Resource
     private CommonConfig commonConfig;
+
     @Override
     public void accept(TransportEventEntry event) {
         String nodeArtifactId = event.getNodeArtifactId();
@@ -72,7 +69,6 @@ public class InstanceRegister extends AsyncEventHandler {
             jeids.setex(nodeArtifactId, redisConfig.getKeyExpire(), gson.toJson(nodeEntry));
         }
         Map<Integer, String> map = configCenter.getConfigByConfigType(ConfigTypeEnum.ARTIFACT_PROFILE.getType());
-//TODO dispatcherID
         Trans.event_data.Builder eventEntry = Trans.event_data.newBuilder();
         byte[] bytes = eventEntry.setType(EventTypeEnum.REGISTER_SUCCESS.getType()).
                 setMsg(gson.toJson(map)).
@@ -80,11 +76,10 @@ public class InstanceRegister extends AsyncEventHandler {
                 setSerialNumber(serialNumber).
                 setDispatcherId(commonConfig.getDispatcherId()).
                 build().toByteArray();
-        HashMap<String, Object> headers = new HashMap<>();
-        headers.put(MqConnector.CONNECTOR_ID, nodeArtifactId);
-        log.info("{}节点注册成功,设备：{}，协议:{}",nodeArtifactId,eqType,protocol);
-        mqConnector.publish(eqQueueName, bytes, headers);
-
+        log.info("节点【{}】，设备类型:【{}】，协议类型【{}】登陆成功", nodeArtifactId, eqType, protocol);
+        PublishEvent publishEvent = new PublishEvent(eqQueueName, bytes, serialNumber);
+        publishEvent.addHeaders(MqConnector.CONNECTOR_ID, nodeArtifactId);
+        mqConnector.publishAsync(publishEvent);
     }
 
     @Override

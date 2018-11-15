@@ -2,8 +2,10 @@ package com.hc.dispatch.event;
 
 
 import com.hc.rpc.MqConnector;
+import com.hc.rpc.PublishEvent;
 import com.hc.rpc.TransportEventEntry;
 
+import java.util.concurrent.ThreadFactory;
 import java.util.function.Consumer;
 
 /**
@@ -11,19 +13,19 @@ import java.util.function.Consumer;
  * 异步事件处理器：
  * 流程：
  *      发送消息：
- *      MqConnector[publish]方法推送给dispatcher端
+ *      MqConnector[publishAsync]方法推送给dispatcher端
  *      回调：
  *      RabbitMq发送消息 -> eventBus转发消息-> 相应节点的MqEventDownStream事件循环获取到事件，分配给EventHandler ->
  *      AsyncEventHandler调用handler方法
  * 同步事件处理器：继承同步事件处理器的子类不要重写accept方法，因为accept方法是异步的，重写后将无法实现同步调用
  * 流程：
  *      发送消息：
- *      MqConnector[publish]方法 -> Warpper.mockCallback设置同步回调-> rabbitMq推送 -> Warpper.blockingResult阻塞直到结果返回
+ *      MqConnector[publishAsync]方法 -> Warpper.mockCallback设置同步回调-> rabbitMq推送 -> Warpper.blockingResult阻塞直到结果返回
  *      回调：
  *      RabbitMq发送消息 -> eventBus转发消息-> 相应节点的MqEventDownStream事件循环获取到事件，分配给EventHandler ->
  *      SyncEventHandler调用handler方法 -> CallbackManager获取同步回调的mockCallback -> 将响应结果set到Warpper里，并唤醒主线程 ->
  *      返回Warpper中的响应结果
- * rabbitmq发送消息详见{@link MqConnector#publishSync(String, String, byte[])}
+ * rabbitmq发送消息详见{@link MqConnector#publishAsync(PublishEvent)} (String, String, byte[])}
  */
 public interface EventHandler extends Consumer<TransportEventEntry>{
     /**
@@ -36,4 +38,19 @@ public interface EventHandler extends Consumer<TransportEventEntry>{
      * @return 事件类型
      */
     Integer setEventType();
+
+    ThreadFactory factory = r -> {
+        Thread thread = new Thread(r);
+        thread.setName("blocking-exec-1");
+        return thread;
+    };
+
+    /**
+     * IO阻塞操作交给这里处理，不要阻塞eventLoop线程
+     *
+     * @param runnable 操作
+     */
+    default void blockingOperation(Runnable runnable) {
+        factory.newThread(runnable).start();
+    }
 }

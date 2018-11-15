@@ -5,7 +5,6 @@ import lombok.Data;
 
 @Data
 public class EquipmentRegisterDTO extends PageDTO{
-    @NotNull
     private String uniqueId;
     @NotNull
     private String equipmentId;

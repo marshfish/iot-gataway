@@ -52,7 +52,6 @@ public class DeviceManagementServiceImpl extends CommonUtil implements DeviceMan
         if (!CollectionUtils.isEmpty(exist)) {
             throw new RuntimeException("该设备已被注册");
         }
-        //TODO 配置中心+ 设备类型
         //注册
         EquipmentRegistry equipmentRegistry = new EquipmentRegistry();
         equipmentRegistry.setUniqueId(md5UniqueId);

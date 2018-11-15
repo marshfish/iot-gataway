@@ -17,17 +17,13 @@ spring:
 dispatcher:
   commons:
     dispatcherId: dispatcher_1
+    defaultTimeout: 6000
     host: 0.0.0.0
     httpPort: 8888
     maxHTTPIdleTime: 5
-    eventBusQueueSize: 100
+    mqEventQueueSize: 100
     eventBusThreadNumber: 1
-    instanceNumber: 1
     maxBusBlockingTime: 1500
-    devCallbackDomain: https://hcdev.hushijie.com.cn/
-    testCallbackDomain: https://hctest.hushijie.com.cn/
-    preOnlineCallbackDomain: https://hcpreonline.hushijie.com.cn/
-    onlineCallbackDomain: https://hconline.hushijie.com.cn/
   redis:
     maxTotal: 100
     maxIdle: 3000

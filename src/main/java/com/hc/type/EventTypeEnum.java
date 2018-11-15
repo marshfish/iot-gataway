@@ -7,13 +7,14 @@ public enum EventTypeEnum {
     LOGIN_SUCCESS(4, "login_success"),
     LOGIN_FAIL(5, "login_fail"),
     SERVER_PUBLISH(6, "server_publish"),
-    CLIENT_RESPONSE(7,"client_response"),
+    CLIENT_RESPONSE(7, "client_response"),
     INSTANCE_REGISTER(9, "instance_register"),
     REGISTER_SUCCESS(10, "register_success"),
     REGISTER_FAIL(11, "register_fail"),
     PING(12, "ping"),
     PONG(13, "pong"),
-    DROPPED(14,"dropped");
+    DROPPED(14, "dropped"),
+    LOGOUT_SUCCESS(15, "logout_success");
     private int type;
     private String desc;
 

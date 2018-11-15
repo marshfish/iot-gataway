@@ -6,32 +6,34 @@ import com.hc.configuration.CommonConfig;
 import com.hc.configuration.MqConfig;
 import com.hc.dispatch.CallbackManager;
 import com.hc.dispatch.ClusterManager;
-import com.hc.dispatch.MqEventUpStream;
 import com.hc.dispatch.event.EventHandler;
+import com.hc.type.QosType;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
 import com.rabbitmq.client.Connection;
 import com.rabbitmq.client.ConnectionFactory;
 import com.rabbitmq.client.DefaultConsumer;
 import com.rabbitmq.client.Envelope;
-import lombok.SneakyThrows;
+import com.rabbitmq.client.Recoverable;
+import com.rabbitmq.client.RecoveryListener;
+import com.rabbitmq.client.ShutdownSignalException;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
-import org.springframework.util.DigestUtils;
 
 import javax.annotation.Resource;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Queue;
 import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 
 @Component
@@ -46,8 +48,9 @@ public class MqConnector implements Bootstrap {
     private ClusterManager clusterManager;
     @Resource
     private CallbackManager callbackManager;
+    @Resource
+    private MqFailProcessor mqFailProcessor;
     private Queue<PublishEvent> publishQueue = new ArrayBlockingQueue<>(100);
-    private Thread publisher;
     private ExecutorService publisherFactory = Executors.newFixedThreadPool(1, r -> {
         Thread thread = new Thread(r);
         thread.setDaemon(true);
@@ -56,57 +59,75 @@ public class MqConnector implements Bootstrap {
     });
     private static Connection connection;
     private static String QUEUE_MODEL = "direct";
-    private Object lock = new Object();
+    private final Object lock = new Object();
     private static final String EQUIPMENT_QUEUE = "equipment_type_";
     public static final String DISPATCHER_ID = "dispatcherId";
     public static final String CONNECTOR_ID = "connectorId";
-    private static String routingKey;
+    private static Map<Integer, String> queueMap = new ConcurrentHashMap<>();
+    private static volatile boolean hasConnected = false;
 
-    @SneakyThrows
-    private void connectRabbitMq() {
+    private void connectRabbitMq() throws IOException, TimeoutException {
         ConnectionFactory factory = new ConnectionFactory();
+        factory.useNio();
+        factory.setAutomaticRecoveryEnabled(true);
+        factory.setNetworkRecoveryInterval(5000);
         factory.setHost(mqConfig.getMqHost());
         factory.setPort(mqConfig.getMqPort());
         factory.setUsername(mqConfig.getMqUserName());
         factory.setPassword(mqConfig.getMqPwd());
         factory.setVirtualHost(StringUtils.isBlank(mqConfig.getVirtualHost()) ? "/" : mqConfig.getVirtualHost());
         connection = factory.newConnection();
+        //adding a ShutdownListener to an object that is already closed will fire the listener immediately
+        connection.addShutdownListener(e -> {
+            log.error("rabbitMq断开连接：{} \r\n location:{}",
+                    Arrays.toString(e.getStackTrace()), e.getReason().protocolMethodName());
+            hasConnected = false;
+            mqConfig.setMqPort(5600);
+            //TODO 是否要手动init?
+            init();
+        });
+        ((Recoverable) connection).addRecoveryListener(new RecoveryListener() {
+            @Override
+            public void handleRecovery(Recoverable recoverable) {
+
+            }
+
+            @Override
+            public void handleRecoveryStarted(Recoverable recoverable) {
+
+            }
+        });
+        hasConnected = true;
     }
 
-    private void registryConsumer() {
+    private void registryConsumer() throws IOException {
         String upQueueName = mqConfig.getUpQueueName();
-        try {
-            Channel channel = newChannel(upQueueName);
-            channel.basicConsume(upQueueName, true, new DefaultConsumer(channel) {
-                @Override
-                public void handleDelivery(String consumerTag, Envelope envelope,
-                                           AMQP.BasicProperties properties, byte[] body) throws IOException {
-                    log.info("收到消息：{}", body);
-                    Object dispatcherId;
-                    if ((dispatcherId = properties.getHeaders().get(DISPATCHER_ID)) != null) {
-                        clusterManager.publish(dispatcherId.toString(), body);
-                    } else {
-                        //若未指定dispatcherId，则使用当前节点解析
-                        clusterManager.publish(commonConfig.getDispatcherId(), body);
-                    }
+        //消费者不关心exchange和queue的binding，声明关注的队列即可
+        Channel channel = connection.createChannel();
+        channel.queueDeclare(upQueueName, true, false, false, null);
+        channel.basicConsume(upQueueName, true, new DefaultConsumer(channel) {
+            @Override
+            public void handleDelivery(String consumerTag, Envelope envelope,
+                                       AMQP.BasicProperties properties, byte[] body) throws IOException {
+                log.info("收到消息：{}", body);
+                Object dispatcherId;
+                Map<String, Object> headers = properties.getHeaders();
+                if (headers == null || (dispatcherId = headers.get(DISPATCHER_ID)) == null) {
+                    clusterManager.publish(commonConfig.getDispatcherId(), body);
+                } else {
+                    clusterManager.publish(dispatcherId.toString(), body);
                 }
-            });
-        } catch (IOException e) {
-            log.error("rabbitmq连接失败，{}", e);
-        }
+            }
+        });
     }
-
 
     /**
-     * 创建设备队列名
+     * 根据设备类型获取设备队列名
      *
      * @return Stirng
      */
-    public String getRoutingKey(Integer eqType) {
-        if (routingKey == null) {
-            routingKey = EQUIPMENT_QUEUE + eqType;
-        }
-        return routingKey;
+    public String getQueue(Integer eqType) {
+        return queueMap.computeIfAbsent(eqType, t -> EQUIPMENT_QUEUE + t);
     }
 
     /**
@@ -116,49 +137,22 @@ public class MqConnector implements Bootstrap {
      * 若不注册eventHandler，则会导致无法接收到事件，同步调用超时
      * 回调流程详见 {@link EventHandler}
      *
-     * @param serialNumber  流水号
-     * @param message       消息
-     * @param downQueueName 设备队列名
-     * @return connector端返回事件
+     * @param publishEvent 推送参数
      */
-    public TransportEventEntry publishSync(String downQueueName, String serialNumber, byte[] message) {
-        return this.publishSync(downQueueName, message, serialNumber, null);
-    }
-
-    /**
-     * 与connector同步通信
-     */
-    public TransportEventEntry publishSync(String downQueueName,
-                                           byte[] message,
-                                           String serialNumber,
-                                           Map<String, Object> headers) {
+    public TransportEventEntry publishSync(PublishEvent publishEvent) {
         SyncWarpper warpper = new SyncWarpper();
         Consumer<TransportEventEntry> consumerProxy = warpper.mockCallback();
-        callbackManager.registerCallbackEvent(serialNumber, consumerProxy);
-        publish(downQueueName, message, headers);
+        callbackManager.registerCallbackEvent(publishEvent.getSerialNumber(), consumerProxy);
+        publishAsync(publishEvent);
         return warpper.blockingResult();
     }
 
     /**
-     * 异步通信
-     *
-     * @param downQueueName 设备队列名
-     * @param message       消息
+     * 与dispatcher异步通信
      */
-    public void publish(String downQueueName, byte[] message) {
-        publish(downQueueName, message, null);
-    }
-
-    /**
-     * 向dispatcher异步推送消息
-     *
-     * @param message       消息体
-     * @param downQueueName 设备队列名
-     */
-    public void publish(String downQueueName, byte[] message, Map<String, Object> headers) {
-        PublishEvent event = new PublishEvent(downQueueName, message, headers);
+    public void publishAsync(PublishEvent publishEvent) {
         synchronized (lock) {
-            if (publishQueue.offer(event)) {
+            if (publishQueue.offer(publishEvent)) {
                 lock.notify();
             } else {
                 log.warn("发送消息队列已满，检查publisher线程是否存活");
@@ -166,29 +160,38 @@ public class MqConnector implements Bootstrap {
         }
     }
 
-
-    /**
-     * channel并非线程安全，共用一个channel可能导致autoACK出现问题
-     *
-     * @return Channel
-     */
-    @SneakyThrows
-    private Channel newChannel(String routingKey) {
-        Channel channel = connection.createChannel();
-        String exchangeName = mqConfig.getExchangeName();
-        //direct模式、持久化交换机
-        channel.exchangeDeclare(exchangeName, QUEUE_MODEL, true);
-        //声明队列,持久化、非排他、非自动删除队列
-        channel.queueDeclare(routingKey, true, false, false, null);
-        //绑定队列到交换机
-        channel.queueBind(routingKey, exchangeName, routingKey);
-        return channel;
-    }
-
     @Override
     public void init() {
-        connectRabbitMq();
-        registryConsumer();
+        //rabbitMq有自动重连机制，但不会在client初始化时生效，故需手动重连
+        //且它的自动重连仅针对connection，channel没用
+        try {
+            connectRabbitMq();
+        } catch (TimeoutException | IOException e) {
+            log.error("连接rabbitmq超时！尝试进行重连");
+            hasConnected = false;
+            while (!hasConnected) {
+                try {
+                    Thread.sleep(5000);
+                } catch (InterruptedException e1) {
+                    //do nothing
+                }
+                try {
+                    connectRabbitMq();
+                } catch (IOException | TimeoutException e1) {
+                    log.error("连接rabbitMq失败，5s后重试");
+                }
+            }
+        }
+        try {
+            registryConsumer();
+        } catch (IOException e) {
+            log.error("注册consumer IO异常，尝试重新注册");
+            try {
+                registryConsumer();
+            } catch (IOException e1) {
+                throw new RuntimeException("无法注册rabbitMq消费者" + Arrays.toString(e1.getStackTrace()));
+            }
+        }
         startPublishThread();
     }
 
@@ -196,13 +199,13 @@ public class MqConnector implements Bootstrap {
      * 由于channel非线程安全，把所有publish的操作放到一条线程处理
      */
     private void startPublishThread() {
-        publisher = new Thread(new Runnable() {
+        publisherFactory.execute(new Runnable() {
             private Map<String, Channel> routingChannel = new HashMap<>();
-            private Logger log = LoggerFactory.getLogger(MqConnector.class);
+            private volatile boolean runnable = true;
 
             @Override
             public void run() {
-                while (true) {
+                while (runnable) {
                     PublishEvent eventEntry;
                     synchronized (lock) {
                         while ((eventEntry = publishQueue.poll()) == null) {
@@ -213,31 +216,41 @@ public class MqConnector implements Bootstrap {
                             }
                         }
                     }
-                    log.info("获取消息，推送给rabbitmq");
-                    //路由键与队列名相同
-                    String routingKey = eventEntry.getDownQueueName();
-                    byte[] message = eventEntry.getMessage();
-                    Map<String, Object> headers = eventEntry.getHeaders();
-                    Channel channel;
-                    if ((channel = routingChannel.get(routingKey)) != null) {
-                        publish(routingKey, message, headers, channel);
-                    } else {
-                        Channel newChannel = newChannel(routingKey);
-                        routingChannel.put(routingKey, newChannel);
-                        publish(routingKey, message, headers, newChannel);
+                    log.info("获取消息，推送给connector，{}",eventEntry);
+                    adaptChannel(eventEntry);
+                }
+            }
+
+            /**
+             * 根据routingKey获取相应的channel
+             */
+            private void adaptChannel(PublishEvent eventEntry) {
+                String queue = eventEntry.getQueue();
+                Channel channel;
+                if ((channel = routingChannel.get(queue)) != null) {
+                    publish(eventEntry, channel);
+                } else {
+                    Channel newChannel = newProducerChannel(queue);
+                    if (newChannel != null) {
+                        routingChannel.put(queue, newChannel);
+                        publish(eventEntry, newChannel);
                     }
+                }
+                //失败消息重发
+                PublishEvent publishEvent;
+                if ((publishEvent = mqFailProcessor.reDeliveryFailMessage()) != null) {
+                    adaptChannel(publishEvent);
                 }
             }
 
             /**
              * 推送给mq
-             *
-             * @param downQueueName 下行队列名，与routingKey相同
-             * @param message       消息
-             * @param headers       消息头
-             * @param localChannel  某一routingKey对应的channel
              */
-            private void publish(String downQueueName, byte[] message, Map<String, Object> headers, Channel localChannel) {
+            private void publish(PublishEvent eventEntry, Channel localChannel) {
+                String routingKey = eventEntry.getQueue();
+                byte[] message = eventEntry.getMessage();
+                Map<String, Object> headers = eventEntry.getHeaders();
+                Integer qos = eventEntry.getQos();
                 String exchangeName = mqConfig.getExchangeName();
                 try {
                     //暂不持久化消息
@@ -246,13 +259,48 @@ public class MqConnector implements Bootstrap {
                             deliveryMode(1).
                             headers(headers).
                             build();
-                    localChannel.basicPublish(exchangeName, downQueueName, props, message);
-                } catch (IOException e) {
-                    e.printStackTrace();
+                    localChannel.basicPublish(exchangeName, routingKey, false, props, message);
+                } catch (IOException | ShutdownSignalException e) {
+                    //mq连接断开消息存入死信队列
+                    if (qos == QosType.AT_LEAST_ONCE.getType()) {
+                        mqFailProcessor.addFailMessage(eventEntry);
+                    } else {
+                        //do nothing
+                        log.warn("mq连接断开，qos0消息丢失：{}", eventEntry);
+                    }
+                }
+            }
+
+            /**
+             * 生产者channel
+             * channel并非线程安全，共用一个channel可能导致autoACK出现问题
+             *
+             * @return Channel
+             */
+
+            private Channel newProducerChannel(String queue) {
+                try {
+                    log.info(queue);
+                    Channel channel = connection.createChannel();
+                    String exchangeName = mqConfig.getExchangeName();
+                    //direct模式、持久化交换机
+                    channel.exchangeDeclare(exchangeName, QUEUE_MODEL, true);
+                    //声明持久化、非排他、非自动删除队列,设置队列消息过期时间
+                    Map<String, Object> param = new HashMap<>();
+//                    param.put("x-message-ttl", 40000);
+                    channel.queueDeclare(queue, true, false, false, param);
+                    //绑定队列到交换机,queue名做routingKey
+                    channel.queueBind(queue, exchangeName, queue);
+                    return channel;
+                } catch (IOException | ShutdownSignalException e1) {
+                    //若connection已关闭
+                    log.error("rabbitMql连接已关闭，无法创建生产者channel，等待重新连接");
+                    e1.printStackTrace();
+                    runnable = false;
+                    return null;
                 }
             }
         });
-        publisherFactory.execute(publisher);
     }
 
     /**

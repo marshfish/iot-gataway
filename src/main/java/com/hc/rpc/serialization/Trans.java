@@ -135,6 +135,16 @@ public final class Trans {
      */
     com.google.protobuf.ByteString
         getUriBytes();
+
+    /**
+     * <code>sfixed32 qos = 13;</code>
+     */
+    int getQos();
+
+    /**
+     * <code>sfixed32 reTryTimeout = 14;</code>
+     */
+    int getReTryTimeout();
   }
   /**
    * Protobuf type {@code event_data}
@@ -161,6 +171,8 @@ public final class Trans {
       profile_ = 0;
       eqQueueName_ = "";
       uri_ = "";
+      qos_ = 0;
+      reTryTimeout_ = 0;
     }
 
     @Override
@@ -259,6 +271,16 @@ public final class Trans {
               String s = input.readStringRequireUtf8();
 
               uri_ = s;
+              break;
+            }
+            case 109: {
+
+              qos_ = input.readSFixed32();
+              break;
+            }
+            case 117: {
+
+              reTryTimeout_ = input.readSFixed32();
               break;
             }
           }
@@ -593,6 +615,24 @@ public final class Trans {
       }
     }
 
+    public static final int QOS_FIELD_NUMBER = 13;
+    private int qos_;
+    /**
+     * <code>sfixed32 qos = 13;</code>
+     */
+    public int getQos() {
+      return qos_;
+    }
+
+    public static final int RETRYTIMEOUT_FIELD_NUMBER = 14;
+    private int reTryTimeout_;
+    /**
+     * <code>sfixed32 reTryTimeout = 14;</code>
+     */
+    public int getReTryTimeout() {
+      return reTryTimeout_;
+    }
+
     private byte memoizedIsInitialized = -1;
     public final boolean isInitialized() {
       byte isInitialized = memoizedIsInitialized;
@@ -640,6 +680,12 @@ public final class Trans {
       }
       if (!getUriBytes().isEmpty()) {
         com.google.protobuf.GeneratedMessageV3.writeString(output, 12, uri_);
+      }
+      if (qos_ != 0) {
+        output.writeSFixed32(13, qos_);
+      }
+      if (reTryTimeout_ != 0) {
+        output.writeSFixed32(14, reTryTimeout_);
       }
       unknownFields.writeTo(output);
     }
@@ -690,6 +736,14 @@ public final class Trans {
       if (!getUriBytes().isEmpty()) {
         size += com.google.protobuf.GeneratedMessageV3.computeStringSize(12, uri_);
       }
+      if (qos_ != 0) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeSFixed32Size(13, qos_);
+      }
+      if (reTryTimeout_ != 0) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeSFixed32Size(14, reTryTimeout_);
+      }
       size += unknownFields.getSerializedSize();
       memoizedSize = size;
       return size;
@@ -730,6 +784,10 @@ public final class Trans {
           .equals(other.getEqQueueName());
       result = result && getUri()
           .equals(other.getUri());
+      result = result && (getQos()
+          == other.getQos());
+      result = result && (getReTryTimeout()
+          == other.getReTryTimeout());
       result = result && unknownFields.equals(other.unknownFields);
       return result;
     }
@@ -766,6 +824,10 @@ public final class Trans {
       hash = (53 * hash) + getEqQueueName().hashCode();
       hash = (37 * hash) + URI_FIELD_NUMBER;
       hash = (53 * hash) + getUri().hashCode();
+      hash = (37 * hash) + QOS_FIELD_NUMBER;
+      hash = (53 * hash) + getQos();
+      hash = (37 * hash) + RETRYTIMEOUT_FIELD_NUMBER;
+      hash = (53 * hash) + getReTryTimeout();
       hash = (29 * hash) + unknownFields.hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -919,6 +981,10 @@ public final class Trans {
 
         uri_ = "";
 
+        qos_ = 0;
+
+        reTryTimeout_ = 0;
+
         return this;
       }
 
@@ -953,6 +1019,8 @@ public final class Trans {
         result.profile_ = profile_;
         result.eqQueueName_ = eqQueueName_;
         result.uri_ = uri_;
+        result.qos_ = qos_;
+        result.reTryTimeout_ = reTryTimeout_;
         onBuilt();
         return result;
       }
@@ -1036,6 +1104,12 @@ public final class Trans {
         if (!other.getUri().isEmpty()) {
           uri_ = other.uri_;
           onChanged();
+        }
+        if (other.getQos() != 0) {
+          setQos(other.getQos());
+        }
+        if (other.getReTryTimeout() != 0) {
+          setReTryTimeout(other.getReTryTimeout());
         }
         this.mergeUnknownFields(other.unknownFields);
         onChanged();
@@ -1743,6 +1817,58 @@ public final class Trans {
         onChanged();
         return this;
       }
+
+      private int qos_ ;
+      /**
+       * <code>sfixed32 qos = 13;</code>
+       */
+      public int getQos() {
+        return qos_;
+      }
+      /**
+       * <code>sfixed32 qos = 13;</code>
+       */
+      public Builder setQos(int value) {
+        
+        qos_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>sfixed32 qos = 13;</code>
+       */
+      public Builder clearQos() {
+        
+        qos_ = 0;
+        onChanged();
+        return this;
+      }
+
+      private int reTryTimeout_ ;
+      /**
+       * <code>sfixed32 reTryTimeout = 14;</code>
+       */
+      public int getReTryTimeout() {
+        return reTryTimeout_;
+      }
+      /**
+       * <code>sfixed32 reTryTimeout = 14;</code>
+       */
+      public Builder setReTryTimeout(int value) {
+        
+        reTryTimeout_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>sfixed32 reTryTimeout = 14;</code>
+       */
+      public Builder clearReTryTimeout() {
+        
+        reTryTimeout_ = 0;
+        onChanged();
+        return this;
+      }
       public final Builder setUnknownFields(
           final com.google.protobuf.UnknownFieldSet unknownFields) {
         return super.setUnknownFieldsProto3(unknownFields);
@@ -1806,13 +1932,14 @@ public final class Trans {
       descriptor;
   static {
     String[] descriptorData = {
-      "\n\013trans.proto\"\341\001\n\nevent_data\022\014\n\004type\030\001 \001" +
+      "\n\013trans.proto\"\204\002\n\nevent_data\022\014\n\004type\030\001 \001" +
       "(\017\022\024\n\014serialNumber\030\002 \001(\t\022\021\n\ttimeStamp\030\003 " +
       "\001(\020\022\026\n\016nodeArtifactId\030\004 \001(\t\022\014\n\004eqId\030\005 \001(" +
       "\t\022\016\n\006eqType\030\006 \001(\017\022\024\n\014dispatcherId\030\007 \001(\t\022" +
       "\020\n\010protocol\030\010 \001(\017\022\013\n\003msg\030\t \001(\t\022\017\n\007profil" +
       "e\030\n \001(\017\022\023\n\013eqQueueName\030\013 \001(\t\022\013\n\003uri\030\014 \001(" +
-      "\tb\006proto3"
+      "\t\022\013\n\003qos\030\r \001(\017\022\024\n\014reTryTimeout\030\016 \001(\017b\006pr" +
+      "oto3"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
         new com.google.protobuf.Descriptors.FileDescriptor.    InternalDescriptorAssigner() {
@@ -1831,7 +1958,7 @@ public final class Trans {
     internal_static_event_data_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_event_data_descriptor,
-        new String[] { "Type", "SerialNumber", "TimeStamp", "NodeArtifactId", "EqId", "EqType", "DispatcherId", "Protocol", "Msg", "Profile", "EqQueueName", "Uri", });
+        new String[] { "Type", "SerialNumber", "TimeStamp", "NodeArtifactId", "EqId", "EqType", "DispatcherId", "Protocol", "Msg", "Profile", "EqQueueName", "Uri", "Qos", "ReTryTimeout", });
   }
 
   // @@protoc_insertion_point(outer_class_scope)

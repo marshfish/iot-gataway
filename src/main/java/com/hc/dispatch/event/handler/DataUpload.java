@@ -42,7 +42,7 @@ public class DataUpload extends AsyncEventHandler {
         validEmpty("上传uri", uri);
         validEmpty("上传消息体", msg);
         validEmpty("设备类型", eqType);
-
+        log.info("接受设备上传的指令：{}",event);
         String uniqueId = MD5(eqType + eqId);
         try (Jedis jedis = jedisPool.getResource()) {
             String hget = jedis.hget(EquipmentLogin.SESSION_MAP, uniqueId);

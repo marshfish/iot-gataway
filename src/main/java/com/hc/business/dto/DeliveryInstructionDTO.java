@@ -10,7 +10,7 @@ import lombok.extern.slf4j.Slf4j;
  */
 @Slf4j
 @Data
-public class EquipmentDTO {
+public class DeliveryInstructionDTO {
     /**
      * 指令流水号
      * 由业务系统生成
@@ -32,5 +32,14 @@ public class EquipmentDTO {
      */
     @NotNull
     private String instruction;
+    /**
+     * 服务质量 0 至多发一次，1 最少发一次
+     */
+    @NotNull
+    private Integer qos;
+    /**
+     * 最大超时时间
+     */
+    private Integer timeout;
 
 }

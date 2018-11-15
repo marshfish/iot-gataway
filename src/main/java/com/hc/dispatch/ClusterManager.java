@@ -71,15 +71,14 @@ public class ClusterManager implements Bootstrap {
      */
     public void listen() {
         log.info("load and listen eventBus ");
-        //TODO
         eventBus.consumer(commonConfig.getDispatcherId(),
                 (Handler<Message<byte[]>>) event -> {
-                    byte[] bytes = event.body();
                     try {
+                        byte[] bytes = event.body();
                         Trans.event_data eventData = Trans.event_data.parseFrom(bytes);
                         TransportEventEntry eventEntry = TransportEventEntry.parseTrans2This(eventData);
                         eventUpStream.handlerMessage(eventEntry);
-                    } catch (InvalidProtocolBufferException e) {
+                    } catch (Exception e) {
                         e.printStackTrace();
                     }
                 });

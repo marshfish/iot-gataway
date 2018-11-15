@@ -3,13 +3,16 @@ package com.hc.mvc;
 import com.google.gson.Gson;
 import com.hc.Bootstrap;
 import com.hc.LoadOrder;
-import com.hc.business.dto.EquipmentDTO;
+import com.hc.business.dto.DeliveryInstructionDTO;
 import com.hc.business.vo.BaseResult;
+import com.hc.configuration.CommonConfig;
 import com.hc.dispatch.event.EventHandlerPipeline;
 import com.hc.dispatch.event.PipelineContainer;
 import com.hc.dispatch.event.handler.ReceiveResponseAsync;
 import com.hc.dispatch.event.handler.ReceiveResponseSync;
 import com.hc.exception.MVCException;
+import com.hc.type.QosType;
+import com.hc.util.CommonUtil;
 import com.hc.util.Idempotent;
 import com.hc.util.IdempotentUtil;
 import com.hc.util.ReflectionUtil;
@@ -17,7 +20,6 @@ import com.hc.util.SpringContextUtil;
 import io.vertx.core.http.HttpServerRequest;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
@@ -29,15 +31,19 @@ import java.util.Optional;
 @Slf4j
 @Component
 @LoadOrder(value = 2)
-public class DispatcherProxy implements Bootstrap {
+public class DispatcherProxy extends CommonUtil implements Bootstrap {
     @Resource
     private IdempotentUtil idempotentUtil;
     @Resource
     private Gson gson;
+    @Resource
+    private CommonConfig commonConfig;
     private static final Map<String, MappingEntry> HTTP_INSTRUCTION_MAPPING = new HashMap<>();
     private static final String PAGE_404 = new Gson().toJson(new BaseResult(404, "无法找到该Controller"));
     private static final String HEADER_AUTO_ACK = "autoAck";
     private static final String HEADER_SERIALIZE_ID = "serialId";
+    private static final String QUALITY_OF_SERVICE = "qos";
+    private static final String TIMEOUT = "timeout";
 
     @SneakyThrows
     @Override
@@ -60,15 +66,11 @@ public class DispatcherProxy implements Bootstrap {
     }
 
     public String routingHTTP(HttpServerRequest request, String jsonBody) {
-        String responseAck = request.getHeader(HEADER_AUTO_ACK);
-        String serialId = request.getHeader(HEADER_SERIALIZE_ID);
-        boolean autoAck = Boolean.parseBoolean(responseAck);
-        //根据请求是否需要应答，添加同步/异步 响应事件处理器
-        AckDynamicPipeline(serialId, autoAck);
         return Optional.ofNullable(request.uri()).
                 map(path -> HTTP_INSTRUCTION_MAPPING.get(path + request.method().name())).
                 map(mappingEntry -> {
                     Method invokeMethod = mappingEntry.getMethod();
+                    //幂等检查
                     Idempotent idempotent;
                     if ((idempotent = invokeMethod.getAnnotation(Idempotent.class)) != null) {
                         long timeout = idempotent.timeout();
@@ -92,10 +94,25 @@ public class DispatcherProxy implements Bootstrap {
                         if (param == null) {
                             throw new MVCException("request body不能为空");
                         }
-                        if (param instanceof EquipmentDTO) {
-                            EquipmentDTO equipmentDTO = (EquipmentDTO) param;
-                            equipmentDTO.setSerialNumber(serialId);
-                            equipmentDTO.setAutoAck(autoAck);
+                        //注入发送指令DTO
+                        if (param instanceof DeliveryInstructionDTO) {
+                            //解析指令推送参数
+                            String responseAck = request.getHeader(HEADER_AUTO_ACK);
+                            String serialId = request.getHeader(HEADER_SERIALIZE_ID);
+                            String responseQos = request.getHeader(QUALITY_OF_SERVICE);
+                            String maxTimeoutStr = request.getHeader(TIMEOUT);
+                            validEmpty("seriaId", serialId);
+                            boolean autoAck = Boolean.parseBoolean(responseAck);
+                            //注入EquipmentDTO
+                            DeliveryInstructionDTO deliveryInstructionDTO = (DeliveryInstructionDTO) param;
+                            deliveryInstructionDTO.setSerialNumber(serialId);
+                            deliveryInstructionDTO.setAutoAck(autoAck);
+                            deliveryInstructionDTO.setQos(responseQos == null ? QosType.AT_MOST_ONCE.getType() :
+                                    Integer.valueOf(responseQos));
+                            deliveryInstructionDTO.setTimeout(maxTimeoutStr == null ? commonConfig.getDefaultTimeout() :
+                                    Integer.valueOf(maxTimeoutStr));
+                            //根据请求是否需要应答，添加同步/异步 响应事件处理器
+                            AckDynamicPipeline(serialId, autoAck);
                         }
                         return ReflectionUtil.invokeMethod(
                                 mappingEntry.getObject(),

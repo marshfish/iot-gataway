@@ -41,11 +41,6 @@ public class CommonUtil {
                 throw new NullParamException(fieldName);
             }
         }
-        if (invoke instanceof Collection) {
-            if (((Collection) invoke).size() == 0) {
-                throw new NullParamException(fieldName);
-            }
-        }
     }
     public void validDTOEmpty(Object dto) {
         if (null == dto) {

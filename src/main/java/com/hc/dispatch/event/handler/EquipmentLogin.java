@@ -3,10 +3,10 @@ package com.hc.dispatch.event.handler;
 import com.google.gson.Gson;
 import com.hc.business.dal.EquipmentDAL;
 import com.hc.business.dal.dao.EquipmentRegistry;
-import com.hc.configuration.ConfigCenter;
 import com.hc.dispatch.event.AsyncEventHandler;
-import com.hc.rpc.SessionEntry;
 import com.hc.rpc.MqConnector;
+import com.hc.rpc.PublishEvent;
+import com.hc.rpc.SessionEntry;
 import com.hc.rpc.TransportEventEntry;
 import com.hc.rpc.serialization.Trans;
 import com.hc.type.EventTypeEnum;
@@ -18,9 +18,7 @@ import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
 import javax.annotation.Resource;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 @Slf4j
 @Component
@@ -33,20 +31,19 @@ public class EquipmentLogin extends AsyncEventHandler {
     private Gson gson;
     @Resource
     private MqConnector mqConnector;
-    @Resource
-    private ConfigCenter configCenter;
-    public static final String SESSION_MAP = "device_session";
+    public static final String SESSION_MAP = "device:session";
 
     @Override
     public void accept(TransportEventEntry event) {
         Integer eqType = event.getEqType();
         String eqId = event.getEqId();
         String nodeArtifactId = event.getNodeArtifactId();
-        String eqQueueName = event.getEqQueueName();
+        String serialNumber = event.getSerialNumber();
         validEmpty("节点ID", nodeArtifactId);
         validEmpty("设备类型", eqType);
         validEmpty("设备唯一ID", eqId);
-        validEmpty("设备队列名", eqQueueName);
+        validEmpty("流水号", serialNumber);
+        String eqQueueName = mqConnector.getQueue(eqType);
         //uniqueId规则，MD5(设备类型+设备ID)
         String md5UniqueId = MD5(eqType + eqId);
         List<EquipmentRegistry> equipment = equipmentDAL.getByUniqueId(md5UniqueId);
@@ -58,10 +55,10 @@ public class EquipmentLogin extends AsyncEventHandler {
                     setType(EventTypeEnum.LOGIN_FAIL.getType()).
                     setNodeArtifactId(nodeArtifactId).
                     setEqId(eqId).
-                    setSerialNumber(String.valueOf(IdGenerator.buildDistributedId())).
+                    setSerialNumber(serialNumber).
                     setTimeStamp(System.currentTimeMillis()).
                     build().toByteArray();
-            publishToConnector(bytes, eqQueueName, nodeArtifactId);
+            publishToConnector(bytes, eqQueueName, nodeArtifactId, serialNumber);
         } else {
             //设备已注册
             Long hsetnx;
@@ -71,7 +68,10 @@ public class EquipmentLogin extends AsyncEventHandler {
                 eqSession.setEqId(eqId);
                 eqSession.setProfile(registry.getEquipmentProfile());
                 eqSession.setEqType(registry.getEquipmentType());
+                eqSession.setNode(nodeArtifactId);
+                log.info("--------------------" + md5UniqueId);
                 hsetnx = jedis.hsetnx(SESSION_MAP, md5UniqueId, gson.toJson(eqSession));
+
             }
             if (hsetnx == 1) {
                 log.info("设备类型：【{}】，ID:【{}】从【{}】节点登陆", eqType, eqId, nodeArtifactId);
@@ -80,10 +80,10 @@ public class EquipmentLogin extends AsyncEventHandler {
                 byte[] bytes = response.setType(EventTypeEnum.LOGIN_SUCCESS.getType()).
                         setNodeArtifactId(nodeArtifactId).
                         setEqId(eqId).
-                        setSerialNumber(String.valueOf(IdGenerator.buildDistributedId())).
+                        setSerialNumber(serialNumber).
                         setTimeStamp(System.currentTimeMillis()).
                         build().toByteArray();
-                publishToConnector(bytes, eqQueueName, nodeArtifactId);
+                publishToConnector(bytes, eqQueueName, nodeArtifactId, serialNumber);
             } else {
                 log.warn("设备登陆失败，设备已登陆，{}", event);
                 Trans.event_data.Builder response = Trans.event_data.newBuilder();
@@ -91,10 +91,10 @@ public class EquipmentLogin extends AsyncEventHandler {
                         setType(EventTypeEnum.LOGIN_FAIL.getType()).
                         setNodeArtifactId(nodeArtifactId).
                         setEqId(eqId).
-                        setSerialNumber(String.valueOf(IdGenerator.buildDistributedId())).
+                        setSerialNumber(serialNumber).
                         setTimeStamp(System.currentTimeMillis()).
                         build().toByteArray();
-                publishToConnector(bytes, eqQueueName, nodeArtifactId);
+                publishToConnector(bytes, eqQueueName, nodeArtifactId, serialNumber);
             }
         }
     }
@@ -105,10 +105,10 @@ public class EquipmentLogin extends AsyncEventHandler {
      * @param bytes       事件
      * @param eqQueueName 设备队列名
      */
-    private void publishToConnector(byte[] bytes, String eqQueueName, String nodeArtifactId) {
-        Map<String, Object> headers = new HashMap<>();
-        headers.put(MqConnector.CONNECTOR_ID, nodeArtifactId);
-        mqConnector.publish(eqQueueName, bytes);
+    private void publishToConnector(byte[] bytes, String eqQueueName, String nodeArtifactId, String serialNumber) {
+        PublishEvent publishEvent = new PublishEvent(eqQueueName, bytes, serialNumber);
+        publishEvent.addHeaders(MqConnector.CONNECTOR_ID, nodeArtifactId);
+        mqConnector.publishAsync(publishEvent);
     }
 
     @Override

@@ -28,23 +28,19 @@ public class CommonConfig {
      */
     private String host;
     /**
-     * 回调环境域名配置
-     */
-    private String devCallbackDomain;
-    private String testCallbackDomain;
-    private String preOnlineCallbackDomain;
-    private String onlineCallbackDomain;
-    /**
      * 集群通信事件处理线程数
      */
     private int eventBusThreadNumber;
     /**
-     * 集群通信事件队列容量
+     * mq事件队列容量
      */
-    private int eventBusQueueSize;
-    private Integer instanceNumber;
+    private int mqEventQueueSize;
     /**
      * 同步调用最大阻塞时间
      */
     private Integer maxBusBlockingTime;
+    /**
+     * 默认消息重发窗口时间
+     */
+    private Integer defaultTimeout;
 }

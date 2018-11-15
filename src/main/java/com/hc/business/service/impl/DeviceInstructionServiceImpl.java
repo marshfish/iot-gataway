@@ -3,14 +3,17 @@ package com.hc.business.service.impl;
 import com.google.gson.Gson;
 import com.hc.business.dal.EquipmentDAL;
 import com.hc.business.dal.dao.EquipmentRegistry;
-import com.hc.business.dto.EquipmentDTO;
+import com.hc.business.dto.DeliveryInstructionDTO;
 import com.hc.business.service.DeviceInstructionService;
 import com.hc.configuration.CommonConfig;
 import com.hc.dispatch.event.handler.EquipmentLogin;
 import com.hc.rpc.MqConnector;
+import com.hc.rpc.PublishEvent;
 import com.hc.rpc.SessionEntry;
 import com.hc.rpc.TransportEventEntry;
 import com.hc.rpc.serialization.Trans;
+import com.hc.type.EventTypeEnum;
+import com.hc.type.QosType;
 import com.hc.util.CommonUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -22,15 +25,14 @@ import redis.clients.jedis.JedisPool;
 import javax.annotation.Resource;
 import java.util.List;
 
-
+/**
+ * 查询db设备是否注册，获取设备类型
+ * 查询redis，找到设备登陆的节点
+ * 获取集群节点列表，向该节点发布消息
+ */
 @Service
 @Slf4j
 public class DeviceInstructionServiceImpl extends CommonUtil implements DeviceInstructionService {
-    /**
-     * 查询db设备是否注册，获取设备类型
-     * 查询redis，找到设备登陆的节点
-     * 获取集群节点列表，向该节点发布消息
-     */
     @Resource
     private EquipmentDAL equipmentDAL;
     @Resource
@@ -41,10 +43,11 @@ public class DeviceInstructionServiceImpl extends CommonUtil implements DeviceIn
     private MqConnector mqConnector;
     @Resource
     private CommonConfig commonConfig;
+
     @Override
-    public TransportEventEntry publishInstruction(EquipmentDTO equipmentDTO) {
+    public TransportEventEntry publishInstruction(DeliveryInstructionDTO deliveryInstructionDTO) {
         String device;
-        String md5UniqueId = equipmentDTO.getUniqueId();
+        String md5UniqueId = deliveryInstructionDTO.getUniqueId();
         try (Jedis jedis = jedisPool.getResource()) {
             device = jedis.hget(EquipmentLogin.SESSION_MAP, md5UniqueId);
         }
@@ -59,23 +62,32 @@ public class DeviceInstructionServiceImpl extends CommonUtil implements DeviceIn
             SessionEntry sessionEntry = gson.fromJson(device, SessionEntry.class);
             String eqId = sessionEntry.getEqId();
             Integer eqType = sessionEntry.getEqType();
-            String node = sessionEntry.getNode();
+            String nodeArtifactId = sessionEntry.getNode();
             Trans.event_data.Builder entry = Trans.event_data.newBuilder();
-            String serialNumber = equipmentDTO.getSerialNumber();
-            String instruction = equipmentDTO.getInstruction();
-            Boolean autoAck = equipmentDTO.getAutoAck();
+            String serialNumber = deliveryInstructionDTO.getSerialNumber();
+            String instruction = deliveryInstructionDTO.getInstruction();
+            Boolean autoAck = deliveryInstructionDTO.getAutoAck();
+            Integer qos = deliveryInstructionDTO.getQos();
+            Integer timeout = deliveryInstructionDTO.getTimeout();
+
             byte[] bytes = entry.setEqId(eqId).
+                    setType(EventTypeEnum.SERVER_PUBLISH.getType()).
                     setMsg(instruction).
                     setSerialNumber(serialNumber).
                     setDispatcherId(commonConfig.getDispatcherId()).
-                    setNodeArtifactId(node).
                     setTimeStamp(System.currentTimeMillis()).
+                    setQos(qos).
+                    setReTryTimeout(timeout).
                     build().toByteArray();
-            String routingKey = mqConnector.getRoutingKey(eqType);
+            String queue = mqConnector.getQueue(eqType);
+            PublishEvent publishEvent = new PublishEvent(queue, bytes, serialNumber);
+            publishEvent.setQos(qos);
+            publishEvent.setTimeout(timeout);
+            publishEvent.addHeaders(MqConnector.CONNECTOR_ID, nodeArtifactId);
             if (autoAck) {
-                return mqConnector.publishSync(routingKey, serialNumber, bytes);
+                return mqConnector.publishSync(publishEvent);
             } else {
-                mqConnector.publish(routingKey, bytes);
+                mqConnector.publishAsync(publishEvent);
                 return null;
             }
         }
