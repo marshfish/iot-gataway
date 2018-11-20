@@ -10,15 +10,14 @@ import com.hc.rpc.NodeEntry;
 import com.hc.rpc.PublishEvent;
 import com.hc.rpc.TransportEventEntry;
 import com.hc.rpc.serialization.Trans;
-import com.hc.type.ConfigTypeEnum;
 import com.hc.type.EventTypeEnum;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Component;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
 import javax.annotation.Resource;
-import java.util.Map;
 
 @Slf4j
 @Component
@@ -53,11 +52,13 @@ public class InstanceRegister extends AsyncEventHandler {
         boolean protocolRegistry = configCenter.existProtocolType(protocol);
         if (!equipmentName) {
             log.warn("该类型设备未被注册，拒绝连接，{}", event);
-            return;
+            publishRegisterResult(EventTypeEnum.REGISTER_FAIL.getType(),
+                    "该类型设备未被注册，拒绝连接", nodeArtifactId, serialNumber, eqQueueName);
         }
         if (!protocolRegistry) {
             log.warn("不支持该协议类型，拒绝连接，{}", event);
-            return;
+            publishRegisterResult(EventTypeEnum.REGISTER_FAIL.getType(),
+                    "不支持该协议类型，拒绝连接", nodeArtifactId, serialNumber, eqQueueName);
         }
         //注册节点，无需校验节点是否存在，心跳超时节点自动过期
         try (Jedis jeids = jedisPool.getResource()) {
@@ -66,17 +67,30 @@ public class InstanceRegister extends AsyncEventHandler {
             nodeEntry.setNodeId(nodeArtifactId);
             nodeEntry.setNodeNumber(10000);
             nodeEntry.setProtocol(protocol);
-            jeids.setex(nodeArtifactId, redisConfig.getKeyExpire(), gson.toJson(nodeEntry));
+            //TODO 并发不安全
+            Boolean exists = jeids.exists(nodeArtifactId);
+            if (exists) {
+                log.warn("connector节点已登录，无法重复登陆");
+                publishRegisterResult(EventTypeEnum.REGISTER_FAIL.getType(),
+                        "节点已登录，无法重复登陆", nodeArtifactId, serialNumber, eqQueueName);
+            } else {
+                jeids.setex(nodeArtifactId, redisConfig.getKeyExpire(), gson.toJson(nodeEntry));
+            }
         }
-        Map<Integer, String> map = configCenter.getConfigByConfigType(ConfigTypeEnum.ARTIFACT_PROFILE.getType());
-        Trans.event_data.Builder eventEntry = Trans.event_data.newBuilder();
-        byte[] bytes = eventEntry.setType(EventTypeEnum.REGISTER_SUCCESS.getType()).
-                setMsg(gson.toJson(map)).
+        log.info("节点【{}】，设备类型:【{}】，协议类型【{}】登陆成功", nodeArtifactId, eqType, protocol);
+        publishRegisterResult(EventTypeEnum.REGISTER_SUCCESS.getType(),
+                StringUtils.EMPTY, nodeArtifactId, serialNumber, eqQueueName);
+    }
+
+    private void publishRegisterResult(Integer type, String msg, String nodeArtifactId,
+                                       String serialNumber, String eqQueueName) {
+        byte[] bytes = Trans.event_data.newBuilder().
+                setType(type).
+                setMsg(msg).
                 setNodeArtifactId(nodeArtifactId).
                 setSerialNumber(serialNumber).
                 setDispatcherId(commonConfig.getDispatcherId()).
                 build().toByteArray();
-        log.info("节点【{}】，设备类型:【{}】，协议类型【{}】登陆成功", nodeArtifactId, eqType, protocol);
         PublishEvent publishEvent = new PublishEvent(eqQueueName, bytes, serialNumber);
         publishEvent.addHeaders(MqConnector.CONNECTOR_ID, nodeArtifactId);
         mqConnector.publishAsync(publishEvent);

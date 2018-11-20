@@ -20,20 +20,22 @@ dispatcher:
     defaultTimeout: 6000
     host: 0.0.0.0
     httpPort: 8888
-    maxHTTPIdleTime: 5
+    maxHTTPIdleTime: 5000
     mqEventQueueSize: 100
-    eventBusThreadNumber: 1
     maxBusBlockingTime: 1500
   redis:
     maxTotal: 100
-    maxIdle: 3000
-    maxWaitMills: 3000
+    maxIdle: 10
+    maxWaitMills: 180000
     testOnBorrow: true
     address: 39.105.125.26
     port: 6379
     maxWait: 3000
     auth: qweasdzxc~!@#
     databaseIndex: 5
+    timeBetweenEvictionRunsMillis: 30000
+    numTestsPerEvictionRun: 10
+    minEvictableIdleTimeMillis: 90000
     keyExpire: 180
   rabbitmq:
     mqHost: 39.105.125.26

@@ -31,6 +31,13 @@ public class EquipmentLogout extends AsyncEventHandler {
         validEmpty("设备类型", eqType);
         validEmpty("节点ID", nodeArtifactId);
         validEmpty("事件唯一ID",serialNumber);
+        //验证connector是否注册
+        String queue = mqConnector.getQueue(eqType);
+        boolean register = validNodeRegister(nodeArtifactId);
+        if (!register) {
+            reConnectPush(queue, nodeArtifactId);
+            return;
+        }
         String md5UniqueId = MD5(eqType + eqId);
         try (Jedis jedis = jedisPool.getResource()) {
             jedis.hdel(EquipmentLogin.SESSION_MAP, md5UniqueId);
@@ -38,14 +45,14 @@ public class EquipmentLogout extends AsyncEventHandler {
         log.info("设备类型：【{}】，ID:【{}】从【{}】节点退出登陆,sessionId:【{}】",
                 eqType, eqId, nodeArtifactId, md5UniqueId);
         Trans.event_data.Builder builder = Trans.event_data.newBuilder();
-        byte[] bytes = builder.setType(EventTypeEnum.DEVICE_LOGOUT.getType()).
+        byte[] bytes = builder.setType(EventTypeEnum.LOGOUT_SUCCESS.getType()).
                 setEqId(eqId).
                 setTimeStamp(System.currentTimeMillis()).
                 setSerialNumber(serialNumber).
                 build().toByteArray();
-        PublishEvent publishEvent = new PublishEvent(mqConnector.getQueue(eqType), bytes, serialNumber);
+        PublishEvent publishEvent = new PublishEvent(queue, bytes, serialNumber);
         publishEvent.addHeaders(MqConnector.CONNECTOR_ID, nodeArtifactId);
-        mqConnector.publishSync(publishEvent);
+        mqConnector.publishAsync(publishEvent);
     }
 
     @Override

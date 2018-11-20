@@ -13,17 +13,17 @@ import com.hc.rpc.SessionEntry;
 import com.hc.rpc.TransportEventEntry;
 import com.hc.rpc.serialization.Trans;
 import com.hc.type.EventTypeEnum;
-import com.hc.type.QosType;
 import com.hc.util.CommonUtil;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.util.CollectionUtils;
-import org.springframework.util.StringUtils;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
 import javax.annotation.Resource;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * 查询db设备是否注册，获取设备类型
@@ -45,7 +45,7 @@ public class DeviceInstructionServiceImpl extends CommonUtil implements DeviceIn
     private CommonConfig commonConfig;
 
     @Override
-    public TransportEventEntry publishInstruction(DeliveryInstructionDTO deliveryInstructionDTO) {
+    public String publishInstruction(DeliveryInstructionDTO deliveryInstructionDTO) {
         String device;
         String md5UniqueId = deliveryInstructionDTO.getUniqueId();
         try (Jedis jedis = jedisPool.getResource()) {
@@ -59,17 +59,20 @@ public class DeviceInstructionServiceImpl extends CommonUtil implements DeviceIn
                 throw new RuntimeException("该设备不在线");
             }
         } else {
+            //设备会话
             SessionEntry sessionEntry = gson.fromJson(device, SessionEntry.class);
             String eqId = sessionEntry.getEqId();
             Integer eqType = sessionEntry.getEqType();
             String nodeArtifactId = sessionEntry.getNode();
-            Trans.event_data.Builder entry = Trans.event_data.newBuilder();
+            //配置信息
             String serialNumber = deliveryInstructionDTO.getSerialNumber();
             String instruction = deliveryInstructionDTO.getInstruction();
-            Boolean autoAck = deliveryInstructionDTO.getAutoAck();
+            Boolean wait = deliveryInstructionDTO.getWait();
+            Integer waitTimeout = deliveryInstructionDTO.getWaitTimeout();
             Integer qos = deliveryInstructionDTO.getQos();
-            Integer timeout = deliveryInstructionDTO.getTimeout();
-
+            Integer qosTimeout = deliveryInstructionDTO.getQosTimeout();
+            //序列化
+            Trans.event_data.Builder entry = Trans.event_data.newBuilder();
             byte[] bytes = entry.setEqId(eqId).
                     setType(EventTypeEnum.SERVER_PUBLISH.getType()).
                     setMsg(instruction).
@@ -77,18 +80,20 @@ public class DeviceInstructionServiceImpl extends CommonUtil implements DeviceIn
                     setDispatcherId(commonConfig.getDispatcherId()).
                     setTimeStamp(System.currentTimeMillis()).
                     setQos(qos).
-                    setReTryTimeout(timeout).
+                    setReTryTimeout(qosTimeout).
                     build().toByteArray();
             String queue = mqConnector.getQueue(eqType);
             PublishEvent publishEvent = new PublishEvent(queue, bytes, serialNumber);
             publishEvent.setQos(qos);
-            publishEvent.setTimeout(timeout);
+            publishEvent.setTimeout(qosTimeout);
             publishEvent.addHeaders(MqConnector.CONNECTOR_ID, nodeArtifactId);
-            if (autoAck) {
-                return mqConnector.publishSync(publishEvent);
+            //是否挂起请求
+            if (wait) {
+                TransportEventEntry eventEntry = mqConnector.publishSync(publishEvent, waitTimeout);
+                return Optional.ofNullable(eventEntry).map(TransportEventEntry::getMsg).orElse(StringUtils.EMPTY);
             } else {
                 mqConnector.publishAsync(publishEvent);
-                return null;
+                return StringUtils.EMPTY;
             }
         }
     }

@@ -7,6 +7,6 @@ public interface DeviceInstructionService {
     /**
      * 发送指令
      */
-    TransportEventEntry publishInstruction(DeliveryInstructionDTO deliveryInstructionDTO);
+    String publishInstruction(DeliveryInstructionDTO deliveryInstructionDTO);
 
 }

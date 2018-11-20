@@ -28,10 +28,6 @@ public class CommonConfig {
      */
     private String host;
     /**
-     * 集群通信事件处理线程数
-     */
-    private int eventBusThreadNumber;
-    /**
      * mq事件队列容量
      */
     private int mqEventQueueSize;

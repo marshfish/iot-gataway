@@ -21,4 +21,7 @@ public class RedisConfig {
     private String auth;
     private int databaseIndex;
     private int keyExpire;
+    private int timeBetweenEvictionRunsMillis;
+    private int numTestsPerEvictionRun;
+    private int minEvictableIdleTimeMillis;
 }

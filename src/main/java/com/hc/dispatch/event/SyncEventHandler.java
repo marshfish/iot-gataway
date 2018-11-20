@@ -13,7 +13,7 @@ import org.springframework.beans.factory.BeanFactoryAware;
  * 同步事件处理器
  */
 @Slf4j
-public abstract class SyncEventHandler extends CommonUtil implements EventHandler, BeanFactoryAware {
+public abstract class SyncEventHandler extends CommonUtil implements EventHandler {
     private CallbackManager callbackManager;
 
     @Override

@@ -14,7 +14,8 @@ public enum EventTypeEnum {
     PING(12, "ping"),
     PONG(13, "pong"),
     DROPPED(14, "dropped"),
-    LOGOUT_SUCCESS(15, "logout_success");
+    LOGOUT_SUCCESS(15, "logout_success"),
+    UPLOAD_SUCCESS(16,"upload_success");
     private int type;
     private String desc;
 

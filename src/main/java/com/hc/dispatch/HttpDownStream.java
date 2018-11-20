@@ -32,8 +32,9 @@ public class HttpDownStream extends AbstractVerticle {
 
     @Override
     public void start() throws Exception {
+        //最大阻塞Http请求时间
         httpServer = vertx.createHttpServer(new HttpServerOptions().
-                setIdleTimeout(commonConfig.getMaxHTTPIdleTime()));
+                setIdleTimeout(5));
         loadConnectionProcessor();
         loadBootstrapListener();
     }

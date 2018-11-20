@@ -62,21 +62,6 @@ public class Ping extends AsyncEventHandler {
         mqConnector.publishAsync(publishEvent);
     }
 
-    /**
-     * 通知该节点断线重连
-     */
-    private void reConnectPush(String eqQueueName, String nodeArtifactId) {
-        String id = String.valueOf(IdGenerator.buildDistributedId());
-        Trans.event_data.Builder eventEntry = Trans.event_data.newBuilder();
-        byte[] bytes = eventEntry.setType(EventTypeEnum.DROPPED.getType()).
-                setSerialNumber(id).
-                build().toByteArray();
-        //drop
-        PublishEvent publishEvent = new PublishEvent(eqQueueName, bytes, id);
-        publishEvent.addHeaders(MqConnector.CONNECTOR_ID, nodeArtifactId);
-        mqConnector.publishAsync(publishEvent);
-    }
-
     @Override
     public Integer setEventType() {
         return EventTypeEnum.PING.getType();

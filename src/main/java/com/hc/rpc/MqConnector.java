@@ -32,6 +32,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
@@ -51,7 +53,11 @@ public class MqConnector implements Bootstrap {
     @Resource
     private MqFailProcessor mqFailProcessor;
     private Queue<PublishEvent> publishQueue = new ArrayBlockingQueue<>(100);
-    private ExecutorService publisherFactory = Executors.newFixedThreadPool(1, r -> {
+    private ExecutorService publisherFactory = new ThreadPoolExecutor(1,
+            1,
+            0,
+            TimeUnit.MILLISECONDS,
+            new LinkedBlockingDeque<>(200), r -> {
         Thread thread = new Thread(r);
         thread.setDaemon(true);
         thread.setName("publish-exec-1");
@@ -82,19 +88,18 @@ public class MqConnector implements Bootstrap {
             log.error("rabbitMq断开连接：{} \r\n location:{}",
                     Arrays.toString(e.getStackTrace()), e.getReason().protocolMethodName());
             hasConnected = false;
-            mqConfig.setMqPort(5600);
-            //TODO 是否要手动init?
-            init();
         });
-        ((Recoverable) connection).addRecoveryListener(new RecoveryListener() {
+        Recoverable recoverable = (Recoverable) MqConnector.connection;
+        recoverable.addRecoveryListener(new RecoveryListener() {
             @Override
             public void handleRecovery(Recoverable recoverable) {
-
+                log.warn("rabbitMq完成自动连接");
+                hasConnected = true;
             }
 
             @Override
             public void handleRecoveryStarted(Recoverable recoverable) {
-
+                log.warn("rabbitMq_准备开始重连");
             }
         });
         hasConnected = true;
@@ -105,7 +110,7 @@ public class MqConnector implements Bootstrap {
         //消费者不关心exchange和queue的binding，声明关注的队列即可
         Channel channel = connection.createChannel();
         channel.queueDeclare(upQueueName, true, false, false, null);
-        channel.basicConsume(upQueueName, true, new DefaultConsumer(channel) {
+        channel.basicConsume(upQueueName, true, "", new DefaultConsumer(channel) {
             @Override
             public void handleDelivery(String consumerTag, Envelope envelope,
                                        AMQP.BasicProperties properties, byte[] body) throws IOException {
@@ -139,12 +144,12 @@ public class MqConnector implements Bootstrap {
      *
      * @param publishEvent 推送参数
      */
-    public TransportEventEntry publishSync(PublishEvent publishEvent) {
+    public TransportEventEntry publishSync(PublishEvent publishEvent, long blockingTime) {
         SyncWarpper warpper = new SyncWarpper();
         Consumer<TransportEventEntry> consumerProxy = warpper.mockCallback();
         callbackManager.registerCallbackEvent(publishEvent.getSerialNumber(), consumerProxy);
         publishAsync(publishEvent);
-        return warpper.blockingResult();
+        return warpper.blockingResult(blockingTime);
     }
 
     /**
@@ -201,11 +206,16 @@ public class MqConnector implements Bootstrap {
     private void startPublishThread() {
         publisherFactory.execute(new Runnable() {
             private Map<String, Channel> routingChannel = new HashMap<>();
-            private volatile boolean runnable = true;
+            private boolean runnable = true;
 
             @Override
             public void run() {
                 while (runnable) {
+                    //重连成功后重发失败消息
+                    PublishEvent publishEvent;
+                    while ((publishEvent = mqFailProcessor.reDeliveryFailMessage()) != null) {
+                        adaptChannel(publishEvent);
+                    }
                     PublishEvent eventEntry;
                     synchronized (lock) {
                         while ((eventEntry = publishQueue.poll()) == null) {
@@ -215,14 +225,14 @@ public class MqConnector implements Bootstrap {
                                 e.printStackTrace();
                             }
                         }
+                        log.info("获取消息，推送给connector，{}", eventEntry);
+                        adaptChannel(eventEntry);
                     }
-                    log.info("获取消息，推送给connector，{}",eventEntry);
-                    adaptChannel(eventEntry);
                 }
             }
 
             /**
-             * 根据routingKey获取相应的channel
+             * 根据routingKey获取相应的channel，分发消息给不同设备的队列
              */
             private void adaptChannel(PublishEvent eventEntry) {
                 String queue = eventEntry.getQueue();
@@ -234,12 +244,15 @@ public class MqConnector implements Bootstrap {
                     if (newChannel != null) {
                         routingChannel.put(queue, newChannel);
                         publish(eventEntry, newChannel);
+                    } else {
+                        //mq连接断开消息存入死信队列
+                        if (eventEntry.getQos() == QosType.AT_LEAST_ONCE.getType()) {
+                            mqFailProcessor.addFailMessage(eventEntry);
+                        } else {
+                            //do nothing
+                            log.warn("mq_channel创建失败，qos0消息丢失：{}", eventEntry);
+                        }
                     }
-                }
-                //失败消息重发
-                PublishEvent publishEvent;
-                if ((publishEvent = mqFailProcessor.reDeliveryFailMessage()) != null) {
-                    adaptChannel(publishEvent);
                 }
             }
 
@@ -311,16 +324,16 @@ public class MqConnector implements Bootstrap {
         private CountDownLatch latch = new CountDownLatch(1);
         private long current = System.currentTimeMillis();
 
-        public TransportEventEntry blockingResult() {
+        public TransportEventEntry blockingResult(long timeout) {
             try {
-                boolean await = latch.await(commonConfig.getMaxBusBlockingTime(), TimeUnit.MILLISECONDS);
+                boolean await = latch.await(timeout, TimeUnit.MILLISECONDS);
                 if (!await) {
                     log.warn("同步调用超时，检查mq连接状态");
-                    return new TransportEventEntry();
+                    return null;
                 }
             } catch (InterruptedException e) {
                 log.warn("同步调用线程被中断,{}", e);
-                return new TransportEventEntry();
+                return null;
             }
             log.info("同步调用返回结果:{},耗时：{}", eventEntry, System.currentTimeMillis() - current);
             return eventEntry;

@@ -30,9 +30,9 @@ public class DispatcherApplication {
         sortList.sort((o1, o2) -> {
             Integer finalOrder = 1000;
             Integer o1Sort = Optional.ofNullable(o1.getClass().getAnnotation(LoadOrder.class)).
-                    map(a -> a.value()).orElse(finalOrder);
+                    map(LoadOrder::value).orElse(finalOrder);
             Integer o2Sort = Optional.ofNullable(o2.getClass().getAnnotation(LoadOrder.class)).
-                    map(a -> a.value()).orElse(finalOrder);
+                    map(LoadOrder::value).orElse(finalOrder);
             return o1Sort - o2Sort;
         });
         sortList.forEach(Bootstrap::init);

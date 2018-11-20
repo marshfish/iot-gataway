@@ -40,10 +40,11 @@ public class DispatcherProxy extends CommonUtil implements Bootstrap {
     private CommonConfig commonConfig;
     private static final Map<String, MappingEntry> HTTP_INSTRUCTION_MAPPING = new HashMap<>();
     private static final String PAGE_404 = new Gson().toJson(new BaseResult(404, "无法找到该Controller"));
-    private static final String HEADER_AUTO_ACK = "autoAck";
+    private static final String WAIT = "wait";
+    private static final String WAIT_TIMEOUT = "wait_timeout";
     private static final String HEADER_SERIALIZE_ID = "serialId";
     private static final String QUALITY_OF_SERVICE = "qos";
-    private static final String TIMEOUT = "timeout";
+    private static final String TIMEOUT = "qos_timeout";
 
     @SneakyThrows
     @Override
@@ -97,19 +98,27 @@ public class DispatcherProxy extends CommonUtil implements Bootstrap {
                         //注入发送指令DTO
                         if (param instanceof DeliveryInstructionDTO) {
                             //解析指令推送参数
-                            String responseAck = request.getHeader(HEADER_AUTO_ACK);
+                            String wait = request.getHeader(WAIT);
                             String serialId = request.getHeader(HEADER_SERIALIZE_ID);
                             String responseQos = request.getHeader(QUALITY_OF_SERVICE);
                             String maxTimeoutStr = request.getHeader(TIMEOUT);
+                            String waitTimeout = request.getHeader(WAIT_TIMEOUT);
                             validEmpty("seriaId", serialId);
-                            boolean autoAck = Boolean.parseBoolean(responseAck);
+                            boolean autoAck = Boolean.parseBoolean(wait);
                             //注入EquipmentDTO
                             DeliveryInstructionDTO deliveryInstructionDTO = (DeliveryInstructionDTO) param;
+                            //推送消息的流水号
                             deliveryInstructionDTO.setSerialNumber(serialId);
-                            deliveryInstructionDTO.setAutoAck(autoAck);
+                            //是否自动确认，是则挂起当前http请求，直到设备响应，返回给http response，或等待超时
+                            deliveryInstructionDTO.setWait(autoAck);
+                            //若开启自动确认的http请求挂起超时时间
+                            deliveryInstructionDTO.setWaitTimeout(waitTimeout == null ? commonConfig.getMaxHTTPIdleTime() :
+                                    Integer.valueOf(waitTimeout));
+                            //是否自动重发消息，0仅发一次，1至少发一次
                             deliveryInstructionDTO.setQos(responseQos == null ? QosType.AT_MOST_ONCE.getType() :
                                     Integer.valueOf(responseQos));
-                            deliveryInstructionDTO.setTimeout(maxTimeoutStr == null ? commonConfig.getDefaultTimeout() :
+                            //消息重发窗口时间，配合qos，超过该时间则不再尝试重发
+                            deliveryInstructionDTO.setQosTimeout(maxTimeoutStr == null ? commonConfig.getDefaultTimeout() :
                                     Integer.valueOf(maxTimeoutStr));
                             //根据请求是否需要应答，添加同步/异步 响应事件处理器
                             AckDynamicPipeline(serialId, autoAck);

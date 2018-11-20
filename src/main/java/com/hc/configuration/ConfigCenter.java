@@ -18,6 +18,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 
 /**
  * 配置中心本地缓存
@@ -220,18 +221,6 @@ public class ConfigCenter implements Bootstrap {
         List<Configuration> list = new ArrayList<>(15);
         configurationDAL.findAll().forEach(list::add);
         return list;
-    }
-
-    /**
-     * 根据配置类型获取详细配置
-     *
-     * @param configType 配置类型
-     */
-    public Map<Integer, String> getConfigByConfigType(Integer configType) {
-        List<Configuration> byConfigType = configurationDAL.getByConfigType(configType);
-        HashMap<Integer, String> map = new HashMap<>();
-        byConfigType.forEach(configuration -> map.put(configuration.getType(), configuration.getDescription()));
-        return map;
     }
 
     @Override

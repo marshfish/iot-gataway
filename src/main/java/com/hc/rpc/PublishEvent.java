@@ -3,7 +3,6 @@ package com.hc.rpc;
 import com.hc.configuration.CommonConfig;
 import com.hc.type.QosType;
 import com.hc.util.SpringContextUtil;
-import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
@@ -14,7 +13,6 @@ import java.util.Map;
 @ToString
 @Getter
 public class PublishEvent {
-    private static Integer defaultTimeout = SpringContextUtil.getBean(CommonConfig.class).getDefaultTimeout();
     /**
      * 队列名
      */
@@ -50,7 +48,7 @@ public class PublishEvent {
         this.queue = queue;
         this.message = message;
         this.serialNumber = serialNumber;
-        this.timeout = defaultTimeout;
+        this.timeout = SpringContextUtil.getBean(CommonConfig.class).getDefaultTimeout();
         this.qos = QosType.AT_MOST_ONCE.getType();
         this.timeStamp = System.currentTimeMillis();
     }

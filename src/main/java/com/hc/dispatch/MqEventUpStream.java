@@ -15,6 +15,8 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
@@ -35,17 +37,14 @@ public class MqEventUpStream implements Bootstrap {
 
     private void initQueue() {
         eventQueue = new ArrayBlockingQueue<>(commonConfig.getMqEventQueueSize());
-        eventExecutor = Executors.newFixedThreadPool(commonConfig.getEventBusThreadNumber(), new ThreadFactory() {
-            private AtomicInteger count = new AtomicInteger(1);
-
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread thread = new Thread(r);
-                thread.setDaemon(true);
-                thread.setName("event-loop-" + count.getAndIncrement());
-                return thread;
-            }
-        });
+        eventExecutor = new ThreadPoolExecutor(
+                1, 1, 0, TimeUnit.MILLISECONDS,
+                new ArrayBlockingQueue<>(100), r -> {
+                    Thread thread = new Thread(r);
+                    thread.setDaemon(true);
+                    thread.setName("event-loop-1");
+                    return thread;
+                });
     }
 
     public void handlerMessage(TransportEventEntry transportEventEntry) {

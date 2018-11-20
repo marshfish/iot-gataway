@@ -86,7 +86,7 @@ public class DeviceManagementServiceImpl extends CommonUtil implements DeviceMan
         Specification<EquipmentRegistry> specification = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>(6);
             if (StringUtils.isNotBlank(uniqueId)) {
-                predicates.add(cb.equal(root.get("eqId"), uniqueId));
+                predicates.add(cb.equal(root.get("uniqueId"), uniqueId));
             }
             if (StringUtils.isNotBlank(equipmentId)) {
                 predicates.add(cb.equal(root.get("equipmentId"), equipmentId));

@@ -26,7 +26,7 @@ public class DeviceInstructionController extends CommonUtil {
     @Route(value = "/publish", method = HttpMethod.POST, desc = "推送设备指令")
     public BaseResult publishInstruction(DeliveryInstructionDTO deliveryInstructionDTO) {
         validDTOEmpty(deliveryInstructionDTO);
-        TransportEventEntry result = deviceInstructionService.publishInstruction(deliveryInstructionDTO);
+        String result = deviceInstructionService.publishInstruction(deliveryInstructionDTO);
         return new BaseResult(result);
     }
 }

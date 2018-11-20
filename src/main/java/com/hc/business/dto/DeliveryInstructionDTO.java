@@ -21,7 +21,12 @@ public class DeliveryInstructionDTO {
      * 挂起请求并返回设备响应结果
      */
     @NotNull
-    private Boolean autoAck;
+    private Boolean wait;
+    /**
+     * 挂起请求的最长时间
+     */
+    @NotNull
+    private Integer waitTimeout;
     /**
      * 设备系统唯一ID
      */
@@ -40,6 +45,6 @@ public class DeliveryInstructionDTO {
     /**
      * 最大超时时间
      */
-    private Integer timeout;
+    private Integer qosTimeout;
 
 }

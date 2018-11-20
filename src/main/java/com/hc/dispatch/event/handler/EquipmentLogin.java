@@ -10,7 +10,6 @@ import com.hc.rpc.SessionEntry;
 import com.hc.rpc.TransportEventEntry;
 import com.hc.rpc.serialization.Trans;
 import com.hc.type.EventTypeEnum;
-import com.hc.util.IdGenerator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.util.CollectionUtils;
@@ -43,7 +42,13 @@ public class EquipmentLogin extends AsyncEventHandler {
         validEmpty("设备类型", eqType);
         validEmpty("设备唯一ID", eqId);
         validEmpty("流水号", serialNumber);
+        //验证connector是否注册
         String eqQueueName = mqConnector.getQueue(eqType);
+        boolean register = validNodeRegister(nodeArtifactId);
+        if (!register) {
+            reConnectPush(eqQueueName, nodeArtifactId);
+            return;
+        }
         //uniqueId规则，MD5(设备类型+设备ID)
         String md5UniqueId = MD5(eqType + eqId);
         List<EquipmentRegistry> equipment = equipmentDAL.getByUniqueId(md5UniqueId);
@@ -69,34 +74,37 @@ public class EquipmentLogin extends AsyncEventHandler {
                 eqSession.setProfile(registry.getEquipmentProfile());
                 eqSession.setEqType(registry.getEquipmentType());
                 eqSession.setNode(nodeArtifactId);
-                log.info("--------------------" + md5UniqueId);
                 hsetnx = jedis.hsetnx(SESSION_MAP, md5UniqueId, gson.toJson(eqSession));
-
             }
+            //有些设备长连接并不稳定，可能频繁发送登陆包，因此不做登陆校验
             if (hsetnx == 1) {
-                log.info("设备类型：【{}】，ID:【{}】从【{}】节点登陆", eqType, eqId, nodeArtifactId);
-                //返回登陆成功事件，传入环境配置
-                Trans.event_data.Builder response = Trans.event_data.newBuilder();
-                byte[] bytes = response.setType(EventTypeEnum.LOGIN_SUCCESS.getType()).
-                        setNodeArtifactId(nodeArtifactId).
-                        setEqId(eqId).
-                        setSerialNumber(serialNumber).
-                        setTimeStamp(System.currentTimeMillis()).
-                        build().toByteArray();
-                publishToConnector(bytes, eqQueueName, nodeArtifactId, serialNumber);
+                log.info("设备类型：【{}】，ID:【{}】从【{}】节点【首次】登陆", eqType, eqId, nodeArtifactId);
             } else {
-                log.warn("设备登陆失败，设备已登陆，{}", event);
-                Trans.event_data.Builder response = Trans.event_data.newBuilder();
-                byte[] bytes = response.setMsg("设备登陆失败，设备已登陆").
-                        setType(EventTypeEnum.LOGIN_FAIL.getType()).
-                        setNodeArtifactId(nodeArtifactId).
-                        setEqId(eqId).
-                        setSerialNumber(serialNumber).
-                        setTimeStamp(System.currentTimeMillis()).
-                        build().toByteArray();
-                publishToConnector(bytes, eqQueueName, nodeArtifactId, serialNumber);
+                log.info("设备类型：【{}】，ID:【{}】从【{}】节点【重复】登陆", eqType, eqId, nodeArtifactId);
+//                validLogin(eqType, eqId, nodeArtifactId, serialNumber, eqQueueName);
             }
+            //返回登陆成功事件，传入环境配置
+            Trans.event_data.Builder response = Trans.event_data.newBuilder();
+            byte[] bytes = response.setType(EventTypeEnum.LOGIN_SUCCESS.getType()).
+                    setNodeArtifactId(nodeArtifactId).
+                    setEqId(eqId).
+                    setSerialNumber(serialNumber).
+                    setTimeStamp(System.currentTimeMillis()).
+                    build().toByteArray();
+            publishToConnector(bytes, eqQueueName, nodeArtifactId, serialNumber);
         }
+    }
+
+    private void validLogin(Integer eqType, String eqId, String nodeArtifactId, String serialNumber, String eqQueueName) {
+        Trans.event_data.Builder response = Trans.event_data.newBuilder();
+        byte[] bytes = response.setMsg("设备登陆失败，设备已登陆").
+                setType(EventTypeEnum.LOGIN_FAIL.getType()).
+                setNodeArtifactId(nodeArtifactId).
+                setEqId(eqId).
+                setSerialNumber(serialNumber).
+                setTimeStamp(System.currentTimeMillis()).
+                build().toByteArray();
+        publishToConnector(bytes, eqQueueName, nodeArtifactId, serialNumber);
     }
 
     /**
