@@ -21,12 +21,12 @@ public class DeliveryInstructionDTO {
      * 挂起请求并返回设备响应结果
      */
     @NotNull
-    private Boolean wait;
+    private Boolean rpcModel;
     /**
      * 挂起请求的最长时间
      */
     @NotNull
-    private Integer waitTimeout;
+    private Integer rpcTimeout;
     /**
      * 设备系统唯一ID
      */

@@ -11,7 +11,6 @@ import com.hc.dispatch.event.MapDatabase;
 import com.hc.rpc.MqConnector;
 import com.hc.rpc.PublishEvent;
 import com.hc.rpc.SessionEntry;
-import com.hc.rpc.TransportEventEntry;
 import com.hc.rpc.serialization.Trans;
 import com.hc.type.EventTypeEnum;
 import com.hc.util.AsyncHttpClient;
@@ -53,7 +52,7 @@ public class DataUpload extends AsyncEventHandler implements Bootstrap {
     @Resource
     private MapDatabase mapDatabase;
     private static final Map<String, FailHandler> batchFail = Collections.synchronizedMap(new HashMap<>());
-    private static final String RE_POST_MESSAGE = "http_backup";
+    public static final String RE_POST_MESSAGE = "http_backup";
     private static final ScheduledExecutorService rePostExecutor = Executors.newScheduledThreadPool(1, r -> {
         Thread thread = new Thread(r);
         thread.setDaemon(true);
@@ -62,7 +61,7 @@ public class DataUpload extends AsyncEventHandler implements Bootstrap {
     });
 
     @Override
-    public void accept(TransportEventEntry event) {
+    public void accept(Trans.event_data event) {
         String eqId = event.getEqId();
         String uri = event.getUri();
         String msg = event.getMsg();
@@ -114,7 +113,6 @@ public class DataUpload extends AsyncEventHandler implements Bootstrap {
         PublishEvent publishEvent = new PublishEvent(mqConnector.getQueue(eqType), bytes, serialNumber);
         publishEvent.addHeaders(MqConnector.CONNECTOR_ID, nodeArtifactId);
         mqConnector.publishAsync(publishEvent);
-
     }
 
     @Override
@@ -133,6 +131,7 @@ public class DataUpload extends AsyncEventHandler implements Bootstrap {
                             String param = handler.getParam();
                             AsyncHttpClient.sendPost(url, param, new FailHandler(url, param, handler.getId()));
                         });
+                mapDatabase.close();
             } catch (Exception e) {
                 log.error("重发线程异常：{}", Arrays.toString(e.getStackTrace()));
             }
@@ -144,6 +143,7 @@ public class DataUpload extends AsyncEventHandler implements Bootstrap {
         private String url;
         private String param;
         private String id;
+        private boolean endurance = false;
 
         public FailHandler(String url, String param, String serialNumber) {
             this.url = url;
@@ -153,14 +153,21 @@ public class DataUpload extends AsyncEventHandler implements Bootstrap {
 
         @Override
         public void completed(HttpResponse httpResponse) {
+            if (endurance) {
+                mapDatabase.remove(id, RE_POST_MESSAGE);
+            }
             log.info("调用 {} 接口成功,参数：{}", url, param);
         }
 
         @Override
         public void failed(Exception e) {
             //TODO 批量插入DB，减少大量失败时频繁连接DB的cpu消耗，但可能漏数据，需根据业务动态调整
+            endurance = true;
             if (batchFail.size() == 100) {
-                batchFail.forEach((s, failHandler) -> mapDatabase.write(id, failHandler, RE_POST_MESSAGE));
+                synchronized (batchFail) {
+                    batchFail.forEach((s, failHandler) -> mapDatabase.write(id, failHandler, RE_POST_MESSAGE));
+                    batchFail.clear();
+                }
                 mapDatabase.write(id, this, RE_POST_MESSAGE).close();
                 mapDatabase.close();
             } else {

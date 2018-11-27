@@ -7,6 +7,7 @@ import com.hc.configuration.MqConfig;
 import com.hc.dispatch.CallbackManager;
 import com.hc.dispatch.ClusterManager;
 import com.hc.dispatch.event.EventHandler;
+import com.hc.rpc.serialization.Trans;
 import com.hc.type.QosType;
 import com.rabbitmq.client.AMQP;
 import com.rabbitmq.client.Channel;
@@ -31,7 +32,6 @@ import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingDeque;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -108,22 +108,24 @@ public class MqConnector implements Bootstrap {
     private void registryConsumer() throws IOException {
         String upQueueName = mqConfig.getUpQueueName();
         //消费者不关心exchange和queue的binding，声明关注的队列即可
-        Channel channel = connection.createChannel();
-        channel.queueDeclare(upQueueName, true, false, false, null);
-        channel.basicConsume(upQueueName, true, "", new DefaultConsumer(channel) {
-            @Override
-            public void handleDelivery(String consumerTag, Envelope envelope,
-                                       AMQP.BasicProperties properties, byte[] body) throws IOException {
-                log.info("收到消息：{}", body);
-                Object dispatcherId;
-                Map<String, Object> headers = properties.getHeaders();
-                if (headers == null || (dispatcherId = headers.get(DISPATCHER_ID)) == null) {
-                    clusterManager.publish(commonConfig.getDispatcherId(), body);
-                } else {
-                    clusterManager.publish(dispatcherId.toString(), body);
+        for (int i = 0; i < 2; i++) {
+            Channel channel = connection.createChannel();
+            channel.queueDeclare(upQueueName, true, false, false, null);
+            channel.basicConsume(upQueueName, true, "", new DefaultConsumer(channel) {
+                @Override
+                public void handleDelivery(String consumerTag, Envelope envelope,
+                                           AMQP.BasicProperties properties, byte[] body) throws IOException {
+                    log.info("收到消息：{}", body);
+                    Object dispatcherId;
+                    Map<String, Object> headers = properties.getHeaders();
+                    if (headers == null || (dispatcherId = headers.get(DISPATCHER_ID)) == null) {
+                        clusterManager.publish(commonConfig.getDispatcherId(), body);
+                    } else {
+                        clusterManager.publish(dispatcherId.toString(), body);
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 
     /**
@@ -144,9 +146,9 @@ public class MqConnector implements Bootstrap {
      *
      * @param publishEvent 推送参数
      */
-    public TransportEventEntry publishSync(PublishEvent publishEvent, long blockingTime) {
+    public Trans.event_data publishSync(PublishEvent publishEvent, long blockingTime) {
         SyncWarpper warpper = new SyncWarpper();
-        Consumer<TransportEventEntry> consumerProxy = warpper.mockCallback();
+        Consumer<Trans.event_data> consumerProxy = warpper.mockCallback();
         callbackManager.registerCallbackEvent(publishEvent.getSerialNumber(), consumerProxy);
         publishAsync(publishEvent);
         return warpper.blockingResult(blockingTime);
@@ -320,11 +322,11 @@ public class MqConnector implements Bootstrap {
      * 消息同步器
      */
     private class SyncWarpper {
-        private volatile TransportEventEntry eventEntry;
+        private volatile Trans.event_data eventEntry;
         private CountDownLatch latch = new CountDownLatch(1);
         private long current = System.currentTimeMillis();
 
-        public TransportEventEntry blockingResult(long timeout) {
+        public Trans.event_data blockingResult(long timeout) {
             try {
                 boolean await = latch.await(timeout, TimeUnit.MILLISECONDS);
                 if (!await) {
@@ -339,7 +341,7 @@ public class MqConnector implements Bootstrap {
             return eventEntry;
         }
 
-        public Consumer<TransportEventEntry> mockCallback() {
+        public Consumer<Trans.event_data> mockCallback() {
             return eventEntry -> {
                 this.eventEntry = eventEntry;
                 latch.countDown();

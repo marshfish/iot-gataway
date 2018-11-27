@@ -3,10 +3,9 @@ package com.hc.dispatch.event;
 
 import com.hc.rpc.MqConnector;
 import com.hc.rpc.PublishEvent;
-import com.hc.rpc.TransportEventEntry;
+import com.hc.rpc.serialization.Trans;
 import org.springframework.beans.factory.BeanFactoryAware;
 
-import java.util.concurrent.ThreadFactory;
 import java.util.function.Consumer;
 
 /**
@@ -28,13 +27,13 @@ import java.util.function.Consumer;
  * 返回Warpper中的响应结果
  * rabbitmq发送消息详见{@link MqConnector#publishAsync(PublishEvent)} (String, String, byte[])}
  */
-public interface EventHandler extends Consumer<TransportEventEntry>,BeanFactoryAware {
+public interface EventHandler extends Consumer<Trans.event_data>,BeanFactoryAware {
     /**
      * 事件处理
      *
      * @param event 事件
      */
-    void accept(TransportEventEntry event);
+    void accept(Trans.event_data event);
 
     /**
      * 设置事件类型

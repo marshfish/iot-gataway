@@ -40,8 +40,8 @@ public class DispatcherProxy extends CommonUtil implements Bootstrap {
     private CommonConfig commonConfig;
     private static final Map<String, MappingEntry> HTTP_INSTRUCTION_MAPPING = new HashMap<>();
     private static final String PAGE_404 = new Gson().toJson(new BaseResult(404, "无法找到该Controller"));
-    private static final String WAIT = "wait";
-    private static final String WAIT_TIMEOUT = "wait_timeout";
+    private static final String RPC_MODEL = "rpc_model";
+    private static final String RPC_TIMEOUT = "rpc_timeout";
     private static final String HEADER_SERIALIZE_ID = "serialId";
     private static final String QUALITY_OF_SERVICE = "qos";
     private static final String TIMEOUT = "qos_timeout";
@@ -98,30 +98,30 @@ public class DispatcherProxy extends CommonUtil implements Bootstrap {
                         //注入发送指令DTO
                         if (param instanceof DeliveryInstructionDTO) {
                             //解析指令推送参数
-                            String wait = request.getHeader(WAIT);
+                            String rpcModel = request.getHeader(RPC_MODEL);
                             String serialId = request.getHeader(HEADER_SERIALIZE_ID);
                             String responseQos = request.getHeader(QUALITY_OF_SERVICE);
-                            String maxTimeoutStr = request.getHeader(TIMEOUT);
-                            String waitTimeout = request.getHeader(WAIT_TIMEOUT);
+                            String qosTimeout = request.getHeader(TIMEOUT);
+                            String rpcTimeout = request.getHeader(RPC_TIMEOUT);
                             validEmpty("seriaId", serialId);
-                            boolean autoAck = Boolean.parseBoolean(wait);
-                            //注入EquipmentDTO
+                            boolean rpc = Boolean.parseBoolean(rpcModel);
                             DeliveryInstructionDTO deliveryInstructionDTO = (DeliveryInstructionDTO) param;
                             //推送消息的流水号
                             deliveryInstructionDTO.setSerialNumber(serialId);
-                            //是否自动确认，是则挂起当前http请求，直到设备响应，返回给http response，或等待超时
-                            deliveryInstructionDTO.setWait(autoAck);
-                            //若开启自动确认的http请求挂起超时时间
-                            deliveryInstructionDTO.setWaitTimeout(waitTimeout == null ? commonConfig.getMaxHTTPIdleTime() :
-                                    Integer.valueOf(waitTimeout));
-                            //是否自动重发消息，0仅发一次，1至少发一次
-                            deliveryInstructionDTO.setQos(responseQos == null ? QosType.AT_MOST_ONCE.getType() :
-                                    Integer.valueOf(responseQos));
+                            //是否RPC模式，是则挂起当前http请求，直到设备响应，返回给http response，或等待超时
+                            // 注意：若开启RPC模式，则qos失效，重置为qos1，即最多发送一次
+                            deliveryInstructionDTO.setRpcModel(rpc);
+                            //若开启RPC的http请求挂起超时时间
+                            deliveryInstructionDTO.setRpcTimeout(rpcTimeout == null ? commonConfig.getMaxHTTPIdleTime() :
+                                    Integer.valueOf(rpcTimeout));
+                            //是否自动重发消息，0仅发一次，1至少发一次，rpc默认重置为0
+                            deliveryInstructionDTO.setQos((responseQos == null) || (rpc)
+                                    ? QosType.AT_MOST_ONCE.getType() : Integer.valueOf(responseQos));
                             //消息重发窗口时间，配合qos，超过该时间则不再尝试重发
-                            deliveryInstructionDTO.setQosTimeout(maxTimeoutStr == null ? commonConfig.getDefaultTimeout() :
-                                    Integer.valueOf(maxTimeoutStr));
-                            //根据请求是否需要应答，添加同步/异步 响应事件处理器
-                            AckDynamicPipeline(serialId, autoAck);
+                            deliveryInstructionDTO.setQosTimeout(qosTimeout == null ? commonConfig.getDefaultTimeout() :
+                                    Integer.valueOf(qosTimeout));
+                            //根据是否开启RPC模式，动态添加同步/异步 响应事件处理器
+                            ackDynamicPipeline(serialId, rpc);
                         }
                         return ReflectionUtil.invokeMethod(
                                 mappingEntry.getObject(),
@@ -136,11 +136,11 @@ public class DispatcherProxy extends CommonUtil implements Bootstrap {
                 });
     }
 
-    private void AckDynamicPipeline(String requestId, boolean needAck) {
+    private void ackDynamicPipeline(String requestId, boolean isRpc) {
         PipelineContainer pipelineContainer = SpringContextUtil.getBean(PipelineContainer.class);
         EventHandlerPipeline defaultPipeline = pipelineContainer.getDefaultPipeline();
         EventHandlerPipeline thisPipeline = (EventHandlerPipeline) defaultPipeline.clone();
-        if (needAck) {
+        if (isRpc) {
             //覆盖默认pipeline的同步/异步连接响应处理器
             thisPipeline.addEventHandler(SpringContextUtil.getBean(ReceiveResponseSync.class));
         } else {

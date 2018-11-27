@@ -8,13 +8,14 @@ import org.springframework.stereotype.Component;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Component
 @LoadOrder(value = 10)
 public class PipelineContainer implements Bootstrap {
     //一个请求对应一个pipeline
-    private static Map<String, EventHandlerPipeline> pipelineMap = new LRUHashMap<>();
+    private static Map<String, EventHandlerPipeline> pipelineMap = new ConcurrentHashMap<>();
     //默认公共的pipeline，所有实现了EventHandler的子类都会被注册到默认的pipeline中
     private static final EventHandlerPipeline defaultPipeline = new EventHandlerPipeline();
 
@@ -48,21 +49,4 @@ public class PipelineContainer implements Bootstrap {
                 forEach((name, handler) -> defaultPipeline.addEventHandler(handler));
     }
 
-    /**
-     * 实现LRU的hashMap,预防内存泄漏
-     */
-    private static class LRUHashMap<K, V> extends LinkedHashMap<K, V> {
-
-        protected boolean removeEldestEntry(Map.Entry<K, V> eldest) {
-            return true;
-        }
-
-        public LRUHashMap() {
-            this(200, 0.75f);
-        }
-
-        public LRUHashMap(int initialCapacity, float loadFactor) {
-            super(initialCapacity, loadFactor, true);
-        }
-    }
 }

@@ -5,7 +5,6 @@ import com.hc.configuration.RedisConfig;
 import com.hc.dispatch.event.AsyncEventHandler;
 import com.hc.rpc.MqConnector;
 import com.hc.rpc.PublishEvent;
-import com.hc.rpc.TransportEventEntry;
 import com.hc.rpc.serialization.Trans;
 import com.hc.type.EventTypeEnum;
 import com.hc.util.IdGenerator;
@@ -29,7 +28,7 @@ public class Ping extends AsyncEventHandler {
     private CommonConfig commonConfig;
 
     @Override
-    public void accept(TransportEventEntry event) {
+    public void accept(Trans.event_data event) {
         log.info("收到connector心跳");
         String nodeArtifactId = event.getNodeArtifactId();
         Integer eqType = event.getEqType();

@@ -3,16 +3,31 @@ package com.hc.rpc;
 import com.hc.configuration.CommonConfig;
 import com.hc.type.QosType;
 import com.hc.util.SpringContextUtil;
+import io.netty.util.HashedWheelTimer;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.ToString;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 @ToString
 @Getter
 public class PublishEvent {
+    /**
+     * 时间轮算法定时器
+     */
+    private transient static HashedWheelTimer timer = new HashedWheelTimer();
+    /**
+     * 重发次数
+     */
+    private transient int rePostCount = 0;
+    /**
+     * 是否入库
+     */
+    private transient boolean endurance = false;
     /**
      * 队列名
      */
@@ -60,4 +75,25 @@ public class PublishEvent {
         headers.put(key, value);
     }
 
+    /**
+     * 自增
+     */
+    public PublishEvent addRePostCount() {
+        rePostCount++;
+        return this;
+    }
+
+    /**
+     * 设置入库flag
+     */
+    public void setEnduranceFlag(boolean flag) {
+        this.endurance = flag;
+    }
+
+    /**
+     * 添加timer，用于消息过期，重发校验
+     */
+    public void addTimer(Consumer<PublishEvent> consumer) {
+        timer.newTimeout(timeout -> consumer.accept(this), 6000, TimeUnit.MILLISECONDS);
+    }
 }

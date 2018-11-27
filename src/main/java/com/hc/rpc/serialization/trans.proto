@@ -20,15 +20,11 @@ message event_data {
     sfixed32 protocol = 8;
    
     string msg = 9;
-    
-    sfixed32 profile = 10;
-    
-    string eqQueueName = 11;
 	
-	string uri = 12;
+	string uri = 10;
 	
-	sfixed32 qos = 13;
+	sfixed32 qos = 11;
 	
-	sfixed32 reTryTimeout = 14;
+	sfixed32 reTryTimeout = 12;
     
 }

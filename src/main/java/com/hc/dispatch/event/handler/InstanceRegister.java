@@ -8,7 +8,6 @@ import com.hc.dispatch.event.AsyncEventHandler;
 import com.hc.rpc.MqConnector;
 import com.hc.rpc.NodeEntry;
 import com.hc.rpc.PublishEvent;
-import com.hc.rpc.TransportEventEntry;
 import com.hc.rpc.serialization.Trans;
 import com.hc.type.EventTypeEnum;
 import lombok.extern.slf4j.Slf4j;
@@ -36,17 +35,16 @@ public class InstanceRegister extends AsyncEventHandler {
     private CommonConfig commonConfig;
 
     @Override
-    public void accept(TransportEventEntry event) {
+    public void accept(Trans.event_data event) {
         String nodeArtifactId = event.getNodeArtifactId();
         String serialNumber = event.getSerialNumber();
         Integer eqType = event.getEqType();
         Integer protocol = event.getProtocol();
-        String eqQueueName = event.getEqQueueName();
         validEmpty("节点项目唯一ID", nodeArtifactId);
         validEmpty("节点注册流水号", serialNumber);
         validEmpty("节点设备类型", eqType);
         validEmpty("节点设备协议", protocol);
-        validEmpty("节点队列地址", eqQueueName);
+        String eqQueueName = mqConnector.getQueue(eqType);
         //校验是否存在该类型设备
         boolean equipmentName = configCenter.existEquipmentType(eqType);
         boolean protocolRegistry = configCenter.existProtocolType(protocol);

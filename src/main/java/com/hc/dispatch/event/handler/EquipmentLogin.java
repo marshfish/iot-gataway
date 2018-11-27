@@ -7,7 +7,6 @@ import com.hc.dispatch.event.AsyncEventHandler;
 import com.hc.rpc.MqConnector;
 import com.hc.rpc.PublishEvent;
 import com.hc.rpc.SessionEntry;
-import com.hc.rpc.TransportEventEntry;
 import com.hc.rpc.serialization.Trans;
 import com.hc.type.EventTypeEnum;
 import lombok.extern.slf4j.Slf4j;
@@ -33,15 +32,17 @@ public class EquipmentLogin extends AsyncEventHandler {
     public static final String SESSION_MAP = "device:session";
 
     @Override
-    public void accept(TransportEventEntry event) {
+    public void accept(Trans.event_data event) {
         Integer eqType = event.getEqType();
         String eqId = event.getEqId();
         String nodeArtifactId = event.getNodeArtifactId();
         String serialNumber = event.getSerialNumber();
+        String socketId = event.getMsg();
         validEmpty("节点ID", nodeArtifactId);
         validEmpty("设备类型", eqType);
         validEmpty("设备唯一ID", eqId);
         validEmpty("流水号", serialNumber);
+        validEmpty("socketId", socketId);
         //验证connector是否注册
         String eqQueueName = mqConnector.getQueue(eqType);
         boolean register = validNodeRegister(nodeArtifactId);
@@ -53,13 +54,14 @@ public class EquipmentLogin extends AsyncEventHandler {
         String md5UniqueId = MD5(eqType + eqId);
         List<EquipmentRegistry> equipment = equipmentDAL.getByUniqueId(md5UniqueId);
         //设备尚未注册
-        if (CollectionUtils.isEmpty(equipment)) {
+        if (!CollectionUtils.isEmpty(equipment)) {
             log.warn("设备登陆失败，未注册，{}", event);
             Trans.event_data.Builder response = Trans.event_data.newBuilder();
-            byte[] bytes = response.setMsg("设备登陆失败，未注册").
+            byte[] bytes = response.setMsg(socketId + ":设备登陆失败，未注册").
                     setType(EventTypeEnum.LOGIN_FAIL.getType()).
                     setNodeArtifactId(nodeArtifactId).
                     setEqId(eqId).
+
                     setSerialNumber(serialNumber).
                     setTimeStamp(System.currentTimeMillis()).
                     build().toByteArray();
@@ -67,12 +69,12 @@ public class EquipmentLogin extends AsyncEventHandler {
         } else {
             //设备已注册
             Long hsetnx;
-            EquipmentRegistry registry = equipment.get(0);
+//            EquipmentRegistry registry = equipment.get(0);
             try (Jedis jedis = jedisPool.getResource()) {
                 SessionEntry eqSession = new SessionEntry();
                 eqSession.setEqId(eqId);
-                eqSession.setProfile(registry.getEquipmentProfile());
-                eqSession.setEqType(registry.getEquipmentType());
+                eqSession.setProfile(/*registry.getEquipmentProfile()*/0);
+                eqSession.setEqType(/*registry.getEquipmentType()*/0);
                 eqSession.setNode(nodeArtifactId);
                 hsetnx = jedis.hsetnx(SESSION_MAP, md5UniqueId, gson.toJson(eqSession));
             }

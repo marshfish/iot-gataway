@@ -3,21 +3,17 @@ package com.hc.dispatch;
 import com.hc.Bootstrap;
 import com.hc.LoadOrder;
 import com.hc.configuration.CommonConfig;
-import com.hc.dispatch.event.EventHandler;
 import com.hc.dispatch.event.EventHandlerPipeline;
 import com.hc.dispatch.event.PipelineContainer;
-import com.hc.rpc.TransportEventEntry;
+import com.hc.rpc.serialization.Trans;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 
 /**
@@ -31,7 +27,7 @@ public class MqEventUpStream implements Bootstrap {
     private CommonConfig commonConfig;
     @Resource
     private PipelineContainer pipelineContainer;
-    private ArrayBlockingQueue<TransportEventEntry> eventQueue;
+    private ArrayBlockingQueue<Trans.event_data> eventQueue;
     private ExecutorService eventExecutor;
     private final Object lock = new Object();
 
@@ -47,9 +43,9 @@ public class MqEventUpStream implements Bootstrap {
                 });
     }
 
-    public void handlerMessage(TransportEventEntry transportEventEntry) {
+    public void handlerMessage(Trans.event_data event) {
         synchronized (lock) {
-            if (!eventQueue.add(transportEventEntry)) {
+            if (!eventQueue.add(event)) {
                 log.warn("HttpUpStream事件处理队列已满");
             }
             lock.notify();
@@ -58,13 +54,13 @@ public class MqEventUpStream implements Bootstrap {
 
     /**
      * eventLoop单线程，纯内存操作目无须修改其线程数
-     * 否则一定会出现线程安全问题，如果要执行阻塞操作参考{@link EventHandler#blockingOperation(Runnable)}
+     * 否则一定会出现线程安全问题，如果要执行阻塞操作参考{@link com.hc.dispatch.event.AsyncEventHandler#blockingOperation(Runnable)}
      */
     @SuppressWarnings({"Duplicates", "InfiniteLoopStatement"})
     private void exeEventLoop() {
         eventExecutor.execute(() -> {
             while (true) {
-                TransportEventEntry event;
+                Trans.event_data event;
                 synchronized (lock) {
                     while ((event = eventQueue.poll()) == null) {
                         try {
@@ -77,7 +73,7 @@ public class MqEventUpStream implements Bootstrap {
                 try {
                     Integer eventType = event.getType();
                     String serialNumber = event.getSerialNumber();
-                    Consumer<TransportEventEntry> consumer;
+                    Consumer<Trans.event_data> consumer;
                     EventHandlerPipeline pipeline = pipelineContainer.getPipelineBySerialId(serialNumber);
                     //若未注册pipeline，使用默认的pipeline
                     if (pipeline == null) {
@@ -87,7 +83,7 @@ public class MqEventUpStream implements Bootstrap {
                         consumer.accept(event);
                         pipelineContainer.removePipeline(serialNumber);
                     } else {
-                        log.warn("未经注册的事件，{}", event);
+                        log.warn("未经注册的事件，{}", event.asString());
                     }
                 } catch (Exception e) {
                     log.warn("事件处理异常，{}", e);

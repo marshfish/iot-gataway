@@ -21,7 +21,7 @@ dispatcher:
     host: 0.0.0.0
     httpPort: 8888
     maxHTTPIdleTime: 5000
-    mqEventQueueSize: 100
+    mqEventQueueSize: 1000
     maxBusBlockingTime: 1500
   redis:
     maxTotal: 100

@@ -2,12 +2,11 @@ package com.hc.dispatch.event;
 
 
 import com.hc.dispatch.CallbackManager;
-import com.hc.rpc.TransportEventEntry;
+import com.hc.rpc.serialization.Trans;
 import com.hc.util.CommonUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanFactory;
-import org.springframework.beans.factory.BeanFactoryAware;
 
 /**
  * 同步事件处理器
@@ -22,7 +21,7 @@ public abstract class SyncEventHandler extends CommonUtil implements EventHandle
     }
 
     @Override
-    public void accept(TransportEventEntry event) {
+    public void accept(Trans.event_data event) {
         callbackManager.execCallback(event);
     }
 }

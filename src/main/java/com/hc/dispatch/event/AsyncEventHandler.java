@@ -1,7 +1,6 @@
 package com.hc.dispatch.event;
 
 
-import com.hc.dispatch.CallbackManager;
 import com.hc.rpc.MqConnector;
 import com.hc.rpc.PublishEvent;
 import com.hc.rpc.serialization.Trans;
@@ -11,7 +10,6 @@ import com.hc.util.IdGenerator;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanFactory;
-import org.springframework.beans.factory.BeanFactoryAware;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 

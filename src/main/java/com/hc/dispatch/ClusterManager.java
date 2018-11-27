@@ -1,13 +1,11 @@
 package com.hc.dispatch;
 
 import com.google.gson.Gson;
-import com.google.protobuf.InvalidProtocolBufferException;
 import com.hazelcast.config.Config;
 import com.hazelcast.config.GroupConfig;
 import com.hc.Bootstrap;
 import com.hc.LoadOrder;
 import com.hc.configuration.CommonConfig;
-import com.hc.rpc.TransportEventEntry;
 import com.hc.rpc.serialization.Trans;
 import io.vertx.core.AsyncResult;
 import io.vertx.core.DeploymentOptions;
@@ -75,9 +73,7 @@ public class ClusterManager implements Bootstrap {
                 (Handler<Message<byte[]>>) event -> {
                     try {
                         byte[] bytes = event.body();
-                        Trans.event_data eventData = Trans.event_data.parseFrom(bytes);
-                        TransportEventEntry eventEntry = TransportEventEntry.parseTrans2This(eventData);
-                        eventUpStream.handlerMessage(eventEntry);
+                        eventUpStream.handlerMessage(Trans.event_data.parseFrom(bytes));
                     } catch (Exception e) {
                         e.printStackTrace();
                     }

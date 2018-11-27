@@ -7,12 +7,13 @@ import com.hc.business.dto.DeliveryInstructionDTO;
 import com.hc.business.service.DeviceInstructionService;
 import com.hc.configuration.CommonConfig;
 import com.hc.dispatch.event.handler.EquipmentLogin;
+import com.hc.dispatch.event.handler.ReceiveResponseAsync;
 import com.hc.rpc.MqConnector;
 import com.hc.rpc.PublishEvent;
 import com.hc.rpc.SessionEntry;
-import com.hc.rpc.TransportEventEntry;
 import com.hc.rpc.serialization.Trans;
 import com.hc.type.EventTypeEnum;
+import com.hc.type.QosType;
 import com.hc.util.CommonUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
@@ -43,6 +44,8 @@ public class DeviceInstructionServiceImpl extends CommonUtil implements DeviceIn
     private MqConnector mqConnector;
     @Resource
     private CommonConfig commonConfig;
+    @Resource
+    private ReceiveResponseAsync responseAsync;
 
     @Override
     public String publishInstruction(DeliveryInstructionDTO deliveryInstructionDTO) {
@@ -67,8 +70,8 @@ public class DeviceInstructionServiceImpl extends CommonUtil implements DeviceIn
             //配置信息
             String serialNumber = deliveryInstructionDTO.getSerialNumber();
             String instruction = deliveryInstructionDTO.getInstruction();
-            Boolean wait = deliveryInstructionDTO.getWait();
-            Integer waitTimeout = deliveryInstructionDTO.getWaitTimeout();
+            Boolean rpcModel = deliveryInstructionDTO.getRpcModel();
+            Integer rpcTimeout = deliveryInstructionDTO.getRpcTimeout();
             Integer qos = deliveryInstructionDTO.getQos();
             Integer qosTimeout = deliveryInstructionDTO.getQosTimeout();
             //序列化
@@ -88,11 +91,16 @@ public class DeviceInstructionServiceImpl extends CommonUtil implements DeviceIn
             publishEvent.setTimeout(qosTimeout);
             publishEvent.addHeaders(MqConnector.CONNECTOR_ID, nodeArtifactId);
             //是否挂起请求
-            if (wait) {
-                TransportEventEntry eventEntry = mqConnector.publishSync(publishEvent, waitTimeout);
-                return Optional.ofNullable(eventEntry).map(TransportEventEntry::getMsg).orElse(StringUtils.EMPTY);
+            if (rpcModel) {
+                Trans.event_data eventEntry = mqConnector.publishSync(publishEvent, rpcTimeout);
+                return Optional.ofNullable(eventEntry).map(Trans.event_data::getMsg).orElse(StringUtils.EMPTY);
             } else {
-                mqConnector.publishAsync(publishEvent);
+                //qos1处理
+                if (qos == QosType.AT_LEAST_ONCE.getType()) {
+                    responseAsync.qos1Publish(serialNumber, publishEvent);
+                } else {
+                    mqConnector.publishAsync(publishEvent);
+                }
                 return StringUtils.EMPTY;
             }
         }

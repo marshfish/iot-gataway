@@ -3,7 +3,6 @@ package com.hc.dispatch.event.handler;
 import com.hc.dispatch.event.AsyncEventHandler;
 import com.hc.rpc.MqConnector;
 import com.hc.rpc.PublishEvent;
-import com.hc.rpc.TransportEventEntry;
 import com.hc.rpc.serialization.Trans;
 import com.hc.type.EventTypeEnum;
 import lombok.extern.slf4j.Slf4j;
@@ -22,7 +21,7 @@ public class EquipmentLogout extends AsyncEventHandler {
     private MqConnector mqConnector;
 
     @Override
-    public void accept(TransportEventEntry event) {
+    public void accept(Trans.event_data event) {
         String eqId = event.getEqId();
         Integer eqType = event.getEqType();
         String nodeArtifactId = event.getNodeArtifactId();
