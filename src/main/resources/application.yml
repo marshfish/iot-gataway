@@ -6,14 +6,15 @@ logging:
 spring:
   datasource:
     driver-class-name: com.mysql.jdbc.Driver
-    url: jdbc:mysql://localhost:3306/hc_dev?useUnicode=true&characterEncoding=UTF-8&serverTimezone=UTC
-    username: root
-    password: csk110110
+    url: jdbc:mysql://39.105.125.26:3306/device_message_queue?useUnicode=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull&useSSL=false
+    username: hc_test
+    password: HCtest123!
   jpa:
       properties:
         hibernate:
           hbm2ddl:
             auto: update
+      database-platform: org.hibernate.dialect.MySQL5InnoDBDialect
 dispatcher:
   commons:
     dispatcherId: dispatcher_1
@@ -44,7 +45,6 @@ dispatcher:
     mqPwd: 12345678
     virtualHost: /
     upQueueName: upstream
-    downQueueName: downstream
     exchangeName: device_communication
 
 

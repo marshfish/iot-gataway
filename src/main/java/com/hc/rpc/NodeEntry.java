@@ -12,10 +12,6 @@ public class NodeEntry {
      */
     private String nodeId;
     /**
-     * 节点编号
-     */
-    private Integer nodeNumber;
-    /**
      * 设备类型
      */
     private Integer eqType;

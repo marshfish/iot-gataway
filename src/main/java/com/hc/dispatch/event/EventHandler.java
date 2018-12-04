@@ -34,7 +34,6 @@ public interface EventHandler extends Consumer<Trans.event_data>,BeanFactoryAwar
      * @param event 事件
      */
     void accept(Trans.event_data event);
-
     /**
      * 设置事件类型
      *

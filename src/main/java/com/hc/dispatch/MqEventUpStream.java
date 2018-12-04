@@ -54,7 +54,7 @@ public class MqEventUpStream implements Bootstrap {
 
     /**
      * eventLoop单线程，纯内存操作目无须修改其线程数
-     * 否则一定会出现线程安全问题，如果要执行阻塞操作参考{@link com.hc.dispatch.event.AsyncEventHandler#blockingOperation(Runnable)}
+     * 否则一定会出现线程安全问题，如果要执行阻塞操作参考{@link ClusterManager#getVertx()}
      */
     @SuppressWarnings({"Duplicates", "InfiniteLoopStatement"})
     private void exeEventLoop() {

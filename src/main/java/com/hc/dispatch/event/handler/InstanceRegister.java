@@ -63,7 +63,6 @@ public class InstanceRegister extends AsyncEventHandler {
             NodeEntry nodeEntry = new NodeEntry();
             nodeEntry.setEqType(eqType);
             nodeEntry.setNodeId(nodeArtifactId);
-            nodeEntry.setNodeNumber(10000);
             nodeEntry.setProtocol(protocol);
             //TODO 并发不安全
             Boolean exists = jeids.exists(nodeArtifactId);

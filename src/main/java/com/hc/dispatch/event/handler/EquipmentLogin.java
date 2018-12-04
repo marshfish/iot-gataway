@@ -54,14 +54,13 @@ public class EquipmentLogin extends AsyncEventHandler {
         String md5UniqueId = MD5(eqType + eqId);
         List<EquipmentRegistry> equipment = equipmentDAL.getByUniqueId(md5UniqueId);
         //设备尚未注册
-        if (!CollectionUtils.isEmpty(equipment)) {
+        if (CollectionUtils.isEmpty(equipment)) {
             log.warn("设备登陆失败，未注册，{}", event);
             Trans.event_data.Builder response = Trans.event_data.newBuilder();
             byte[] bytes = response.setMsg(socketId + ":设备登陆失败，未注册").
                     setType(EventTypeEnum.LOGIN_FAIL.getType()).
                     setNodeArtifactId(nodeArtifactId).
                     setEqId(eqId).
-
                     setSerialNumber(serialNumber).
                     setTimeStamp(System.currentTimeMillis()).
                     build().toByteArray();
@@ -69,12 +68,12 @@ public class EquipmentLogin extends AsyncEventHandler {
         } else {
             //设备已注册
             Long hsetnx;
-//            EquipmentRegistry registry = equipment.get(0);
+            EquipmentRegistry registry = equipment.get(0);
             try (Jedis jedis = jedisPool.getResource()) {
                 SessionEntry eqSession = new SessionEntry();
                 eqSession.setEqId(eqId);
-                eqSession.setProfile(/*registry.getEquipmentProfile()*/0);
-                eqSession.setEqType(/*registry.getEquipmentType()*/0);
+                eqSession.setProfile(registry.getEquipmentProfile());
+                eqSession.setEqType(registry.getEquipmentType());
                 eqSession.setNode(nodeArtifactId);
                 hsetnx = jedis.hsetnx(SESSION_MAP, md5UniqueId, gson.toJson(eqSession));
             }

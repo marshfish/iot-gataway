@@ -22,20 +22,6 @@ import java.util.concurrent.ThreadFactory;
 public abstract class AsyncEventHandler extends CommonUtil implements EventHandler {
     private JedisPool jedisPool;
     private MqConnector mqConnector;
-    private ThreadFactory factory = r -> {
-        Thread thread = new Thread(r);
-        thread.setName("blocking-exec-1");
-        return thread;
-    };
-
-    /**
-     * IO阻塞操作交给这里处理，不要阻塞eventLoop线程
-     *
-     * @param runnable 操作
-     */
-    protected void blockingOperation(Runnable runnable) {
-        factory.newThread(runnable).start();
-    }
 
     @Override
     public void setBeanFactory(BeanFactory beanFactory) throws BeansException {

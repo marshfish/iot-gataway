@@ -1,14 +1,22 @@
 package com.hc.dispatch.event.handler;
 
+import com.google.gson.Gson;
 import com.hc.Bootstrap;
+import com.hc.business.dto.DeliveryInstructionDTO;
+import com.hc.business.service.DeviceInstructionService;
+import com.hc.configuration.CommonConfig;
 import com.hc.dispatch.event.AsyncEventHandler;
 import com.hc.dispatch.event.MapDatabase;
 import com.hc.rpc.MqConnector;
 import com.hc.rpc.PublishEvent;
+import com.hc.rpc.SessionEntry;
 import com.hc.rpc.serialization.Trans;
 import com.hc.type.EventTypeEnum;
+import com.hc.util.AsyncHttpClient;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import redis.clients.jedis.Jedis;
+import redis.clients.jedis.JedisPool;
 
 import javax.annotation.Resource;
 import java.util.Arrays;
@@ -28,6 +36,10 @@ public class ReceiveResponseAsync extends AsyncEventHandler implements Bootstrap
     private MapDatabase mapDatabase;
     @Resource
     private MqConnector mqConnector;
+    @Resource
+    private JedisPool jedisPool;
+    @Resource
+    private Gson gson;
     private Map<String, PublishEvent> backupData = new HashMap<>();
     private Queue<PublishEvent> failQueue = new LinkedBlockingQueue<>(200);
     public static final String QOS1_BACKUP = "qos1_backup";
@@ -87,17 +99,28 @@ public class ReceiveResponseAsync extends AsyncEventHandler implements Bootstrap
                     while ((publishEvent = failQueue.poll()) != null) {
                         long now = System.currentTimeMillis();
                         publishEvent.addRePostCount();
-                        //当该消息投递次数小于2次时，暂不持久化到DB，继续尝试重发
                         String serialNumber = publishEvent.getSerialNumber();
-                        if (publishEvent.getRePostCount() < 2) {
-                            log.info("尝试立即重发失败消息");
-                            if (now > publishEvent.getTimeStamp() + publishEvent.getTimeout()) {
-                                qos1Publish(serialNumber, publishEvent);
-                            }
-                        } else {
-                            log.info("尝试次数大于两次，持久化失败消息到DB，等待重新发送");
-                            //写入到嵌入式数据库中
-                            if (now > publishEvent.getTimeStamp() + publishEvent.getTimeout()) {
+                        //判断是否超时
+                        if (now > publishEvent.getTimeStamp() + publishEvent.getTimeout()) {
+                            //当该消息投递次数小于2次时，暂不持久化到DB，继续尝试重发
+                            if (publishEvent.getRePostCount() < 2) {
+                                log.info("尝试立即重发失败消息");
+                                String device;
+                                //重发时需注意设备可能经负载均衡连到其他节点，需重新获取其所处节点位置
+                                try (Jedis jedis = jedisPool.getResource()) {
+                                    device = jedis.hget(EquipmentLogin.SESSION_MAP, publishEvent.getUniqueId());
+                                }
+                                final PublishEvent publisher = publishEvent;
+                                Optional.ofNullable(device).
+                                        map(d -> gson.fromJson(d, SessionEntry.class)).
+                                        map(SessionEntry::getNode).
+                                        ifPresent(node -> {
+                                            publisher.addHeaders(MqConnector.CONNECTOR_ID, node);
+                                            qos1Publish(serialNumber, publisher);
+                                        });
+                            } else {
+                                log.info("尝试次数大于两次，持久化失败消息到DB，等待重新发送");
+                                //写入到嵌入式数据库中
                                 publishEvent.setEnduranceFlag(true);
                                 mapDatabase.write(serialNumber,
                                         publishEvent,
@@ -108,16 +131,25 @@ public class ReceiveResponseAsync extends AsyncEventHandler implements Bootstrap
                     }
                     //每2小时检查一下数据库，尝试重发
                     if (count == 2) {
-                        log.info("重新发送消息");
+                        log.info("检查消息重发DB");
                         long now = System.currentTimeMillis();
+                        //重发qos1消息
                         mapDatabase.read(PublishEvent.class, QOS1_BACKUP).
                                 forEach(event -> {
                                     if (now > event.getTimeStamp() + event.getTimeout()) {
+                                        log.info("重发消息：{}", event);
                                         qos1Publish(event.getSerialNumber(), event);
                                     } else {
                                         //过期消息
                                         mapDatabase.remove(event.getSerialNumber(), QOS1_BACKUP);
                                     }
+                                });
+                        //重发数据上传
+                        mapDatabase.read(DataUpload.FailHandler.class, DataUpload.RE_POST_MESSAGE).
+                                forEach(handler -> {
+                                    String url = handler.getUrl();
+                                    String param = handler.getParam();
+                                    AsyncHttpClient.sendPost(url, param, new DataUpload.FailHandler(url, param, handler.getId(), mapDatabase));
                                 });
                         mapDatabase.close();
                         count = 0;

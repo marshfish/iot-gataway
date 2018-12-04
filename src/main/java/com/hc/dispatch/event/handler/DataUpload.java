@@ -1,7 +1,6 @@
 package com.hc.dispatch.event.handler;
 
 import com.google.gson.Gson;
-import com.hc.Bootstrap;
 import com.hc.business.dal.dao.EquipmentRegistry;
 import com.hc.business.dto.EquipmentRegisterDTO;
 import com.hc.business.service.DeviceManagementService;
@@ -14,31 +13,24 @@ import com.hc.rpc.SessionEntry;
 import com.hc.rpc.serialization.Trans;
 import com.hc.type.EventTypeEnum;
 import com.hc.util.AsyncHttpClient;
-import com.rabbitmq.utility.Utility;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.http.HttpResponse;
 import org.apache.http.concurrent.FutureCallback;
-import org.omg.CORBA.PERSIST_STORE;
 import org.springframework.stereotype.Component;
 import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
 import javax.annotation.Resource;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
-import java.util.function.BiConsumer;
 
 @Slf4j
 @Component
-public class DataUpload extends AsyncEventHandler implements Bootstrap {
+public class DataUpload extends AsyncEventHandler {
     @Resource
     private JedisPool jedisPool;
     @Resource
@@ -53,12 +45,6 @@ public class DataUpload extends AsyncEventHandler implements Bootstrap {
     private MapDatabase mapDatabase;
     private static final Map<String, FailHandler> batchFail = Collections.synchronizedMap(new HashMap<>());
     public static final String RE_POST_MESSAGE = "http_backup";
-    private static final ScheduledExecutorService rePostExecutor = Executors.newScheduledThreadPool(1, r -> {
-        Thread thread = new Thread(r);
-        thread.setDaemon(true);
-        thread.setName("rePost-exec-1");
-        return thread;
-    });
 
     @Override
     public void accept(Trans.event_data event) {
@@ -89,7 +75,7 @@ public class DataUpload extends AsyncEventHandler implements Bootstrap {
                 Integer profile = sessionEntry.getProfile();
                 String callbackDomain = configCenter.getProfileRegistry().get(profile);
                 String url = callbackDomain + uri;
-                AsyncHttpClient.sendPost(url, msg, new FailHandler(url, msg, serialNumber));
+                AsyncHttpClient.sendPost(url, msg, new FailHandler(url, msg, serialNumber, mapDatabase));
             } else {
                 log.warn("设备会话不在线，但能正常通信，检查数据一致");
                 EquipmentRegisterDTO equipmentRegisterDTO = new EquipmentRegisterDTO();
@@ -99,7 +85,7 @@ public class DataUpload extends AsyncEventHandler implements Bootstrap {
                 if (registry != null) {
                     String callbackDomain = configCenter.getProfileRegistry().get(registry.getEquipmentProfile());
                     String url = callbackDomain + uri;
-                    AsyncHttpClient.sendPost(url, msg, new FailHandler(url, msg, serialNumber));
+                    AsyncHttpClient.sendPost(url, msg, new FailHandler(url, msg, serialNumber, mapDatabase));
                 } else {
                     log.warn("该设备并未注册！，{}", event);
                 }
@@ -120,35 +106,19 @@ public class DataUpload extends AsyncEventHandler implements Bootstrap {
         return EventTypeEnum.DEVICE_UPLOAD.getType();
     }
 
-    @Override
-    public void init() {
-        rePostExecutor.scheduleAtFixedRate(() -> {
-            try {
-                //TODO 考虑限流和业务系统负载
-                mapDatabase.read(FailHandler.class, RE_POST_MESSAGE).
-                        forEach(handler -> {
-                            String url = handler.getUrl();
-                            String param = handler.getParam();
-                            AsyncHttpClient.sendPost(url, param, new FailHandler(url, param, handler.getId()));
-                        });
-                mapDatabase.close();
-            } catch (Exception e) {
-                log.error("重发线程异常：{}", Arrays.toString(e.getStackTrace()));
-            }
-        }, 180000, 10 * 60 * 1000, TimeUnit.MILLISECONDS);
-    }
-
     @Getter
-    private class FailHandler implements FutureCallback<HttpResponse> {
+    public static class FailHandler implements FutureCallback<HttpResponse> {
         private String url;
         private String param;
         private String id;
         private boolean endurance = false;
+        private MapDatabase mapDatabase;
 
-        public FailHandler(String url, String param, String serialNumber) {
+        public FailHandler(String url, String param, String serialNumber, MapDatabase mapDatabase) {
             this.url = url;
             this.param = param;
             this.id = serialNumber;
+            this.mapDatabase = mapDatabase;
         }
 
         @Override

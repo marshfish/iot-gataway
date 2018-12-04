@@ -2,6 +2,7 @@ package com.hc.dispatch.event;
 
 import com.hc.Bootstrap;
 import com.hc.LoadOrder;
+import com.hc.dispatch.event.handler.ReceiveResponseSync;
 import com.hc.util.SpringContextUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -45,8 +46,13 @@ public class PipelineContainer implements Bootstrap {
     @Override
     public void init() {
         log.info("load default event pipeline");
-        SpringContextUtil.getContext().getBeansOfType(EventHandler.class).
-                forEach((name, handler) -> defaultPipeline.addEventHandler(handler));
+        //默认不使用同步相应处理器
+        SpringContextUtil.getContext().
+                getBeansOfType(EventHandler.class).
+                values().
+                stream().
+                filter(v -> !(v instanceof ReceiveResponseSync)).
+                forEach(defaultPipeline::addEventHandler);
     }
 
 }

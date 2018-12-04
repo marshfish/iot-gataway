@@ -90,15 +90,23 @@ public class DeviceInstructionServiceImpl extends CommonUtil implements DeviceIn
             publishEvent.setQos(qos);
             publishEvent.setTimeout(qosTimeout);
             publishEvent.addHeaders(MqConnector.CONNECTOR_ID, nodeArtifactId);
-            //是否挂起请求
+            //是否使用rpc模式，rpc模式下也支持qos1
             if (rpcModel) {
+                log.info("rpc模式向【{}】发送消息【{}】,qos【{}】", eqId, instruction, qos);
                 Trans.event_data eventEntry = mqConnector.publishSync(publishEvent, rpcTimeout);
+                if (qos == QosType.AT_LEAST_ONCE.getType() && eventEntry == null) {
+                    publishEvent.setUniqueId(md5UniqueId);
+                    responseAsync.qos1Publish(serialNumber, publishEvent);
+                }
                 return Optional.ofNullable(eventEntry).map(Trans.event_data::getMsg).orElse(StringUtils.EMPTY);
             } else {
                 //qos1处理
                 if (qos == QosType.AT_LEAST_ONCE.getType()) {
+                    log.info("向【{}】发送qos1消息【{}】", eqId, instruction);
+                    publishEvent.setUniqueId(md5UniqueId);
                     responseAsync.qos1Publish(serialNumber, publishEvent);
                 } else {
+                    log.info("向【{}】发送qos0消息【{}】", eqId, instruction);
                     mqConnector.publishAsync(publishEvent);
                 }
                 return StringUtils.EMPTY;

@@ -227,7 +227,6 @@ public class MqConnector implements Bootstrap {
                                 e.printStackTrace();
                             }
                         }
-                        log.info("获取消息，推送给connector，{}", eventEntry);
                         adaptChannel(eventEntry);
                     }
                 }
@@ -247,13 +246,7 @@ public class MqConnector implements Bootstrap {
                         routingChannel.put(queue, newChannel);
                         publish(eventEntry, newChannel);
                     } else {
-                        //mq连接断开消息存入死信队列
-                        if (eventEntry.getQos() == QosType.AT_LEAST_ONCE.getType()) {
-                            mqFailProcessor.addFailMessage(eventEntry);
-                        } else {
-                            //do nothing
-                            log.warn("mq_channel创建失败，qos0消息丢失：{}", eventEntry);
-                        }
+                        doCycle(eventEntry);
                     }
                 }
             }
@@ -265,7 +258,6 @@ public class MqConnector implements Bootstrap {
                 String routingKey = eventEntry.getQueue();
                 byte[] message = eventEntry.getMessage();
                 Map<String, Object> headers = eventEntry.getHeaders();
-                Integer qos = eventEntry.getQos();
                 String exchangeName = mqConfig.getExchangeName();
                 try {
                     //暂不持久化消息
@@ -276,13 +268,17 @@ public class MqConnector implements Bootstrap {
                             build();
                     localChannel.basicPublish(exchangeName, routingKey, false, props, message);
                 } catch (IOException | ShutdownSignalException e) {
-                    //mq连接断开消息存入死信队列
-                    if (qos == QosType.AT_LEAST_ONCE.getType()) {
-                        mqFailProcessor.addFailMessage(eventEntry);
-                    } else {
-                        //do nothing
-                        log.warn("mq连接断开，qos0消息丢失：{}", eventEntry);
-                    }
+                    doCycle(eventEntry);
+                }
+            }
+
+            private void doCycle(PublishEvent eventEntry) {
+                //mq连接断开消息存入死信队列
+                if (eventEntry.getQos() == QosType.AT_LEAST_ONCE.getType()) {
+                    mqFailProcessor.addFailMessage(eventEntry);
+                } else {
+                    //do nothing
+                    log.warn("mq连接断开，qos0消息丢失：{}", eventEntry);
                 }
             }
 
@@ -348,4 +344,5 @@ public class MqConnector implements Bootstrap {
             };
         }
     }
+
 }

@@ -1,6 +1,8 @@
 package com.hc.dispatch.event;
 
 import com.google.gson.Gson;
+import com.hc.business.dto.ConfigDTO;
+import com.hc.business.dto.PageDTO;
 import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.mapdb.DB;
@@ -11,12 +13,19 @@ import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Random;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 @Slf4j
 @Component
@@ -24,7 +33,6 @@ public class MapDatabase {
     @Resource
     private Gson gson = new Gson();
     private volatile DB db;
-    private Map<String, HTreeMap<String, String>> dbSelector = new HashMap<>();
     private static final String FILE_PATH = System.getProperty("user.dir") +
             File.separator + "db" + File.separator + "msgDB";
 
@@ -41,16 +49,12 @@ public class MapDatabase {
                 }
             }
         }
-        HTreeMap<String, String> map = dbSelector.get(selectDB);
-        if (map == null) {
-            map = db.hashMap(selectDB).
-                    keySerializer(Serializer.STRING).
-                    valueSerializer(Serializer.JAVA).
-                    //持久化的消息最多保存48小时，48小时后无论发送成功或失败都会彻底删除
-                            expireAfterCreate(24 * 60 * 60 * 1000, TimeUnit.MILLISECONDS).
-                            createOrOpen();
-        }
-        return map;
+        return db.hashMap(selectDB).
+                keySerializer(Serializer.STRING).
+                valueSerializer(Serializer.JAVA).
+                //持久化的消息最多保存48小时，48小时后无论发送成功或失败都会彻底删除
+                        expireAfterCreate(24 * 60 * 60 * 1000, TimeUnit.MILLISECONDS).
+                        createOrOpen();
     }
 
     /**
@@ -58,12 +62,17 @@ public class MapDatabase {
      */
     @SneakyThrows
     public MapDatabase write(String key, Object value, String selectDB) {
-        Optional.ofNullable(connect(selectDB)).ifPresent(map -> map.put(key, gson.toJson(value)));
+        Optional.of(connect(selectDB)).ifPresent(map -> map.put(key, gson.toJson(value)));
         return this;
     }
 
+    /**
+     * 删除记录
+     * @param key 键
+     * @param selectDB dbName
+     */
     public void remove(String key, String selectDB) {
-        Optional.ofNullable(connect(selectDB)).ifPresent(map -> map.remove(key));
+        Optional.of(connect(selectDB)).ifPresent(map -> map.remove(key));
     }
 
     /**
@@ -72,7 +81,7 @@ public class MapDatabase {
      */
     public synchronized <T> List<T> read(Class<T> type, String selectDB) {
         LinkedList<T> msgList = new LinkedList<>();
-        Optional.ofNullable(connect(selectDB)).ifPresent(map -> map.forEach((key, value) -> {
+        Optional.of(connect(selectDB)).ifPresent(map -> map.forEach((key, value) -> {
             T obj = gson.fromJson(value, type);
             msgList.add(obj);
         }));
@@ -85,8 +94,7 @@ public class MapDatabase {
     public void close() {
         if (db != null) {
             db.close();
-            db = null;
-            dbSelector.clear();
         }
     }
+
 }

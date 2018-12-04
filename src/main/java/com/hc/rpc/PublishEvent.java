@@ -13,13 +13,17 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Consumer;
 
-@ToString
+@ToString(exclude = "message")
 @Getter
 public class PublishEvent {
     /**
      * 时间轮算法定时器
      */
     private transient static HashedWheelTimer timer = new HashedWheelTimer();
+    /**
+     * 设备系统唯一ID
+     */
+    private String uniqueId;
     /**
      * 重发次数
      */
@@ -95,5 +99,12 @@ public class PublishEvent {
      */
     public void addTimer(Consumer<PublishEvent> consumer) {
         timer.newTimeout(timeout -> consumer.accept(this), 6000, TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * 设置业务系统唯一ID
+     */
+    public void setUniqueId(String uniqueId){
+        this.uniqueId=uniqueId;
     }
 }

@@ -127,6 +127,7 @@ public class DeviceManagementServiceImpl extends CommonUtil implements DeviceMan
             EquipmentRegistry equipmentRegistry = byUniqueId.get(0);
             if (StringUtils.isNotBlank(equipmentId)) {
                 equipmentRegistry.setEquipmentId(equipmentId);
+                equipmentRegistry.setUniqueId(MD5(equipmentRegistry.getEquipmentType() + equipmentId));
             }
             if (equipmentProfile != null) {
                 equipmentRegistry.setEquipmentProfile(equipmentProfile);

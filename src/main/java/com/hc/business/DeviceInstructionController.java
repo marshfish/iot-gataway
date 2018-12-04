@@ -28,4 +28,5 @@ public class DeviceInstructionController extends CommonUtil {
         String result = deviceInstructionService.publishInstruction(deliveryInstructionDTO);
         return new BaseResult(result);
     }
+
 }

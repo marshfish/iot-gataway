@@ -9,6 +9,11 @@ public class IdGenerator {
     private static AtomicInteger index = new AtomicInteger(1);
     private static SnowFlake snowFlake = new SnowFlake();
 
+    /**
+     * cas有序ID
+     *
+     * @return
+     */
     public static int buildCASId() {
         for (; ; ) {
             int current = index.get();
@@ -19,10 +24,26 @@ public class IdGenerator {
         }
     }
 
+    /**
+     * snowFlake算法唯一ID
+     *
+     * @return
+     */
     public static long buildDistributedId() {
         return snowFlake.nextId();
     }
 
+    /**
+     * 业务系统ID
+     * @return
+     */
+    public static String buildBusinessId() {
+        return null;
+    }
+
+    public static void main(String[] args) {
+        System.out.println(IdGenerator.buildDistributedId());
+    }
     private static class SnowFlake {
         /**
          * 开始时间截 (2015-01-01)

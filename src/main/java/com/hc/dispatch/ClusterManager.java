@@ -32,10 +32,9 @@ public class ClusterManager implements Bootstrap {
     @Resource
     private MqEventUpStream eventUpStream;
     @Resource
-    private Gson gson;
-    @Resource
     private CommonConfig commonConfig;
     private static EventBus eventBus;
+    private static Vertx vertx;
 
     @Override
     public void init() {
@@ -54,7 +53,7 @@ public class ClusterManager implements Bootstrap {
 
     private void bootstrapHandler(AsyncResult<Vertx> event) {
         if (event.succeeded()) {
-            Vertx vertx = event.result();
+            vertx = event.result();
             vertx.deployVerticle(HttpDownStream.class, new DeploymentOptions().
                     setInstances(1));
             eventBus = vertx.eventBus();
@@ -107,4 +106,12 @@ public class ClusterManager implements Bootstrap {
     public static EventBus getEventBus() {
         return eventBus;
     }
+
+    /**
+     * 获取vertx
+     */
+    public static Vertx getVertx() {
+        return vertx;
+    }
+
 }
