@@ -12,4 +12,5 @@ public class ConfigDTO {
     private Integer type;
     @NotNull
     private String descriptor;
+
 }

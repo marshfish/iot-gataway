@@ -37,7 +37,6 @@ public class MqEventUpStream implements Bootstrap {
                 1, 1, 0, TimeUnit.MILLISECONDS,
                 new ArrayBlockingQueue<>(100), r -> {
                     Thread thread = new Thread(r);
-                    thread.setDaemon(true);
                     thread.setName("event-loop-1");
                     return thread;
                 });

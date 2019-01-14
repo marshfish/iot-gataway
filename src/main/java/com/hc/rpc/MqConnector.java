@@ -50,8 +50,6 @@ public class MqConnector implements Bootstrap {
     private ClusterManager clusterManager;
     @Resource
     private CallbackManager callbackManager;
-    @Resource
-    private MqFailProcessor mqFailProcessor;
     private Queue<PublishEvent> publishQueue = new ArrayBlockingQueue<>(100);
     private ExecutorService publisherFactory = new ThreadPoolExecutor(1,
             1,
@@ -59,7 +57,6 @@ public class MqConnector implements Bootstrap {
             TimeUnit.MILLISECONDS,
             new LinkedBlockingDeque<>(200), r -> {
         Thread thread = new Thread(r);
-        thread.setDaemon(true);
         thread.setName("publish-exec-1");
         return thread;
     });
@@ -115,7 +112,6 @@ public class MqConnector implements Bootstrap {
                 @Override
                 public void handleDelivery(String consumerTag, Envelope envelope,
                                            AMQP.BasicProperties properties, byte[] body) throws IOException {
-                    log.info("收到消息：{}", body);
                     Object dispatcherId;
                     Map<String, Object> headers = properties.getHeaders();
                     if (headers == null || (dispatcherId = headers.get(DISPATCHER_ID)) == null) {
@@ -213,11 +209,6 @@ public class MqConnector implements Bootstrap {
             @Override
             public void run() {
                 while (runnable) {
-                    //重连成功后重发失败消息
-                    PublishEvent publishEvent;
-                    while ((publishEvent = mqFailProcessor.reDeliveryFailMessage()) != null) {
-                        adaptChannel(publishEvent);
-                    }
                     PublishEvent eventEntry;
                     synchronized (lock) {
                         while ((eventEntry = publishQueue.poll()) == null) {
@@ -245,8 +236,6 @@ public class MqConnector implements Bootstrap {
                     if (newChannel != null) {
                         routingChannel.put(queue, newChannel);
                         publish(eventEntry, newChannel);
-                    } else {
-                        doCycle(eventEntry);
                     }
                 }
             }
@@ -268,17 +257,7 @@ public class MqConnector implements Bootstrap {
                             build();
                     localChannel.basicPublish(exchangeName, routingKey, false, props, message);
                 } catch (IOException | ShutdownSignalException e) {
-                    doCycle(eventEntry);
-                }
-            }
-
-            private void doCycle(PublishEvent eventEntry) {
-                //mq连接断开消息存入死信队列
-                if (eventEntry.getQos() == QosType.AT_LEAST_ONCE.getType()) {
-                    mqFailProcessor.addFailMessage(eventEntry);
-                } else {
-                    //do nothing
-                    log.warn("mq连接断开，qos0消息丢失：{}", eventEntry);
+                    log.error("消息发送失败,等待mq重连：{}",Arrays.toString(e.getStackTrace()));
                 }
             }
 

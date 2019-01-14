@@ -15,7 +15,11 @@ public enum EventTypeEnum {
     PONG(13, "pong"),
     DROPPED(14, "dropped"),
     LOGOUT_SUCCESS(15, "logout_success"),
-    UPLOAD_SUCCESS(16,"upload_success");
+    UPLOAD_SUCCESS(16,"upload_success"),
+    MONITOR(17,"monitor"),
+    MONITOR_DATA(18,"monitor_data"),
+    REGISTER_ERROR(19,"register_error"),
+    DUMP(20,"dump_thread");
     private int type;
     private String desc;
 

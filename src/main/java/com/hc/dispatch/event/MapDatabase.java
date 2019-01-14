@@ -33,8 +33,7 @@ public class MapDatabase {
     @Resource
     private Gson gson = new Gson();
     private volatile DB db;
-    private static final String FILE_PATH = System.getProperty("user.dir") +
-            File.separator + "db" + File.separator + "msgDB";
+    private static final String FILE_PATH = System.getProperty("user.dir")  + File.separator + "msgDB";
 
     /**
      * 持久化的是上传的消息，消息重发并不频繁，因此默认不连接数据库文件，读写时连接

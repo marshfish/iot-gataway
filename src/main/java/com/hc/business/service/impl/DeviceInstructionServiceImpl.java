@@ -6,15 +6,20 @@ import com.hc.business.dal.dao.EquipmentRegistry;
 import com.hc.business.dto.DeliveryInstructionDTO;
 import com.hc.business.service.DeviceInstructionService;
 import com.hc.configuration.CommonConfig;
+import com.hc.configuration.ConfigCenter;
 import com.hc.dispatch.event.handler.EquipmentLogin;
+import com.hc.dispatch.event.handler.MonitorData;
 import com.hc.dispatch.event.handler.ReceiveResponseAsync;
 import com.hc.rpc.MqConnector;
+import com.hc.rpc.NodeEntry;
 import com.hc.rpc.PublishEvent;
 import com.hc.rpc.SessionEntry;
 import com.hc.rpc.serialization.Trans;
 import com.hc.type.EventTypeEnum;
 import com.hc.type.QosType;
 import com.hc.util.CommonUtil;
+import com.hc.util.IdGenerator;
+import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.StringUtils;
 import org.springframework.stereotype.Service;
@@ -23,8 +28,20 @@ import redis.clients.jedis.Jedis;
 import redis.clients.jedis.JedisPool;
 
 import javax.annotation.Resource;
+import java.lang.management.ManagementFactory;
+import java.lang.management.ThreadInfo;
+import java.lang.management.ThreadMXBean;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.stream.Collectors;
 
 /**
  * 查询db设备是否注册，获取设备类型
@@ -46,6 +63,11 @@ public class DeviceInstructionServiceImpl extends CommonUtil implements DeviceIn
     private CommonConfig commonConfig;
     @Resource
     private ReceiveResponseAsync responseAsync;
+    @Resource
+    private ConfigCenter configCenter;
+    @Resource
+    private MonitorData monitorData;
+    private int nodes = 0;
 
     @Override
     public String publishInstruction(DeliveryInstructionDTO deliveryInstructionDTO) {
@@ -97,6 +119,8 @@ public class DeviceInstructionServiceImpl extends CommonUtil implements DeviceIn
                 if (qos == QosType.AT_LEAST_ONCE.getType() && eventEntry == null) {
                     publishEvent.setUniqueId(md5UniqueId);
                     responseAsync.qos1Publish(serialNumber, publishEvent);
+                } else {
+
                 }
                 return Optional.ofNullable(eventEntry).map(Trans.event_data::getMsg).orElse(StringUtils.EMPTY);
             } else {
@@ -109,9 +133,121 @@ public class DeviceInstructionServiceImpl extends CommonUtil implements DeviceIn
                     log.info("向【{}】发送qos0消息【{}】", eqId, instruction);
                     mqConnector.publishAsync(publishEvent);
                 }
+
                 return StringUtils.EMPTY;
             }
         }
+    }
+
+    @Override
+    public List<Response> monitor(Integer eqType) {
+        //设备队列名- 设备节点ID
+        Map<String, List<String>> map;
+        Map<Integer, String> registry = configCenter.getEquipmentTypeRegistry();
+        if (eqType == null) {
+            //查询所有设备的所有节点
+            map = registry.entrySet().stream().collect(Collectors.toMap(Map.Entry::getValue, s -> selectNode(s.getValue())));
+        } else {
+            //查询单个设备的所有节点
+            map = new HashMap<>(1);
+            map.put(mqConnector.getQueue(eqType), Optional.ofNullable(registry.get(eqType)).
+                    map(this::selectNode).
+                    orElse(Collections.emptyList()));
+        }
+        nodes = map.size();
+        Trans.event_data.Builder entry = Trans.event_data.newBuilder();
+        String id = String.valueOf(IdGenerator.buildDistributedId());
+        byte[] bytes = entry.
+                setType(EventTypeEnum.MONITOR.getType()).
+                setSerialNumber(id).
+                setDispatcherId(commonConfig.getDispatcherId()).
+                setTimeStamp(System.currentTimeMillis()).
+                build().toByteArray();
+        //异步推送统计消息
+        map.forEach((key, value) -> value.forEach(node -> {
+            PublishEvent event = new PublishEvent(key, bytes, id);
+            event.addHeaders(MqConnector.CONNECTOR_ID, node);
+            mqConnector.publishAsync(event);
+        }));
+        //阻塞当前线程，直到所有节点返回统计信息或等待超时
+        int timeout = 15000;
+        MonitorData.MonitorWarpper monitorWarpper = monitorData.warpperMonitor(nodes, timeout);
+        FutureTask<List<Trans.event_data>> future = new FutureTask<>(monitorWarpper);
+        future.run();
+        try {
+            List<Response> list = new ArrayList<>();
+            List<Trans.event_data> data;
+            try {
+                data = future.get(timeout, TimeUnit.MILLISECONDS);
+            } catch (TimeoutException e) {
+                //应该不会发生
+                InterruptedException exception = new InterruptedException();
+                exception.setStackTrace(e.getStackTrace());
+                throw exception;
+            }
+            data.forEach(e -> {
+                Response response = new Response();
+                if (e != null) {
+                    if (e.getMsg() == null) {
+                        response.setNode(e.getNodeArtifactId());
+                        response.setInfo(StringUtils.EMPTY);
+                    } else {
+                        response.setNode(e.getNodeArtifactId());
+                        response.setInfo(e.getMsg());
+                    }
+                }
+                list.add(response);
+            });
+            return list;
+        } catch (InterruptedException | ExecutionException e) {
+            e.printStackTrace();
+            return Collections.emptyList();
+        }
+    }
+
+    @Override
+    public String dump(String nodeName, Integer eqType) {
+        Trans.event_data.Builder entry = Trans.event_data.newBuilder();
+        String id = String.valueOf(IdGenerator.buildDistributedId());
+        byte[] bytes = entry.
+                setType(EventTypeEnum.DUMP.getType()).
+                setSerialNumber(id).
+                setDispatcherId(commonConfig.getDispatcherId()).
+                setTimeStamp(System.currentTimeMillis()).
+                build().toByteArray();
+        PublishEvent event = new PublishEvent(mqConnector.getQueue(eqType), bytes, id);
+        event.addHeaders(MqConnector.CONNECTOR_ID, nodeName);
+        Trans.event_data data = mqConnector.publishSync(event, 5);
+        return data.getMsg();
+    }
+
+    @Override
+    public ThreadInfo[] dump() {
+        ThreadMXBean threadMXBean = ManagementFactory.getThreadMXBean();
+        return threadMXBean.dumpAllThreads(true, true);
+    }
+
+    @Data
+    public static class Response {
+        private String node;
+        private String info;
+    }
+
+    private List<String> selectNode(String type) {
+        try (Jedis jedis = jedisPool.getResource()) {
+            return jedis.keys(type + "_*").
+                    stream().
+                    map(jedis::get).
+                    map(v -> gson.fromJson(v, NodeEntry.class)).
+                    map(NodeEntry::getNodeId).
+                    collect(Collectors.toList());
+        }
+    }
+
+    public int countNodeAndClear() {
+        int temp = nodes;
+        nodes = 0;
+        return temp;
     }
 
 

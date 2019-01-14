@@ -50,12 +50,12 @@ public class InstanceRegister extends AsyncEventHandler {
         boolean protocolRegistry = configCenter.existProtocolType(protocol);
         if (!equipmentName) {
             log.warn("该类型设备未被注册，拒绝连接，{}", event);
-            publishRegisterResult(EventTypeEnum.REGISTER_FAIL.getType(),
+            publishRegisterResult(EventTypeEnum.REGISTER_ERROR.getType(),
                     "该类型设备未被注册，拒绝连接", nodeArtifactId, serialNumber, eqQueueName);
         }
         if (!protocolRegistry) {
             log.warn("不支持该协议类型，拒绝连接，{}", event);
-            publishRegisterResult(EventTypeEnum.REGISTER_FAIL.getType(),
+            publishRegisterResult(EventTypeEnum.REGISTER_ERROR.getType(),
                     "不支持该协议类型，拒绝连接", nodeArtifactId, serialNumber, eqQueueName);
         }
         //注册节点，无需校验节点是否存在，心跳超时节点自动过期
@@ -64,12 +64,12 @@ public class InstanceRegister extends AsyncEventHandler {
             nodeEntry.setEqType(eqType);
             nodeEntry.setNodeId(nodeArtifactId);
             nodeEntry.setProtocol(protocol);
-            //TODO 并发不安全
             Boolean exists = jeids.exists(nodeArtifactId);
             if (exists) {
                 log.warn("connector节点已登录，无法重复登陆");
                 publishRegisterResult(EventTypeEnum.REGISTER_FAIL.getType(),
-                        "节点已登录，无法重复登陆", nodeArtifactId, serialNumber, eqQueueName);
+                        "节点已注册，无需重复注册", nodeArtifactId, serialNumber, eqQueueName);
+                return;
             } else {
                 jeids.setex(nodeArtifactId, redisConfig.getKeyExpire(), gson.toJson(nodeEntry));
             }
