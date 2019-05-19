@@ -6,9 +6,9 @@ logging:
 spring:
   datasource:
     driver-class-name: com.mysql.jdbc.Driver
-    url: jdbc:mysql://39.105.125.26:3306/device_message_queue?useUnicode=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull&useSSL=false
-    username: hc_test
-    password: HCtest123!
+    url: jdbc:mysql://localhost:3306/device_message_queue?useUnicode=true&characterEncoding=UTF-8&zeroDateTimeBehavior=convertToNull&useSSL=false
+    username: root
+    password: 123456
   jpa:
       properties:
         hibernate:
@@ -29,7 +29,7 @@ dispatcher:
     maxIdle: 10
     maxWaitMills: 180000
     testOnBorrow: true
-    address: 39.105.125.26
+    address: localhost
     port: 6379
     maxWait: 3000
     auth: qweasdzxc~!@#
@@ -39,7 +39,7 @@ dispatcher:
     minEvictableIdleTimeMillis: 90000
     keyExpire: 180
   rabbitmq:
-    mqHost: 39.105.125.26
+    mqHost: localhost
     mqPort: 5672
     mqUserName: admin
     mqPwd: 12345678
